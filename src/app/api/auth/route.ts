@@ -15,6 +15,9 @@ import { generateTotpSecret, buildOtpauthUri, verifyTotp } from '@/lib/totp';
 import { encryptSecret, decryptSecret } from '@/lib/secret-crypto';
 import { consumeBackupCode, parseBackupCodes, serializeBackupCodes, generateBackupCodes } from '@/lib/backup-codes';
 import { issuePendingToken, verifyPendingToken, PENDING_COOKIE } from '@/lib/pending-token';
+import { getAppSettings } from '@/lib/app-settings';
+import { isFirstEverUser } from '@/lib/admin';
+import { checkInvite, consumeInvite, inviteMatchesEmail } from '@/lib/signup-invites';
 import {
   verifyTrustedCookieValue, issueTrustedCookieValue, generateDeviceTrustKey,
   TRUSTED_COOKIE, TRUSTED_DEVICE_DAYS,
@@ -316,7 +319,7 @@ export async function POST(request: Request) {
     }
 
     if (action === 'register') {
-      const { name, email, otpCode, machineName } = body;
+      const { name, email, otpCode, machineName, inviteToken } = body;
       if (!name || !email || !otpCode || !machineName) {
         return NextResponse.json({ error: 'All fields required' }, { status: 400 });
       }
@@ -324,14 +327,78 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'OTP must be 4 digits' }, { status: 400 });
       }
 
-      const existing = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim()));
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // ── The gate ──────────────────────────────────────────────────────────
+      // Three ways in, checked in this order:
+      //   1. the instance has no users at all — whoever set it up gets in, and
+      //      becomes its admin, because otherwise a fresh install is a locked
+      //      room with the key inside;
+      //   2. open registration is switched on;
+      //   3. a valid, unused, unexpired invite issued to this exact address.
+      //
+      // Enforced here and not only in the UI. Hiding the signup form is a
+      // presentation choice; this is the policy, and it is the only thing
+      // standing between a closed instance and anyone who can POST.
+      const firstEver = await isFirstEverUser();
+      const settings = await getAppSettings();
+
+      let redeemInviteId: number | null = null;
+
+      if (!firstEver && !settings.signupEnabled) {
+        const token = typeof inviteToken === 'string' ? inviteToken.trim() : '';
+        if (!token) {
+          return NextResponse.json(
+            { error: 'Registration is invite-only on this instance.', needsInvite: true },
+            { status: 403 },
+          );
+        }
+
+        const check = await checkInvite(token);
+        // One message for every rejection. Distinguishing "expired" from "never
+        // existed" tells a stranger that a token was real, which is the one
+        // thing a guesser wants to learn.
+        if (!check.ok || !check.invite) {
+          return NextResponse.json(
+            { error: 'That invite link is no longer valid. Ask for a new one.', needsInvite: true },
+            { status: 403 },
+          );
+        }
+        if (!inviteMatchesEmail(check.invite.email, normalizedEmail)) {
+          return NextResponse.json(
+            { error: `This invite is for ${check.invite.email}. Sign up with that address.` },
+            { status: 403 },
+          );
+        }
+        redeemInviteId = check.invite.id;
+      }
+
+      const existing = await db.select().from(users).where(eq(users.email, normalizedEmail));
       if (existing.length > 0) return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
 
       const [user] = await db.insert(users).values({
         name: name.trim(),
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         otpCode: hashSecret(otpCode),
+        // The first account on an empty instance is its operator by definition:
+        // they are the one who configured the database and the environment.
+        isAdmin: firstEver,
       }).returning();
+
+      // Burn the invite only once the account exists, and check that the burn
+      // actually took. consumeInvite is conditional on used_at IS NULL, so two
+      // people redeeming the same link concurrently cannot both get through —
+      // the loser's account is removed rather than left orphaned.
+      if (redeemInviteId !== null) {
+        const burned = await consumeInvite(redeemInviteId, user.id);
+        if (!burned) {
+          await db.delete(users).where(eq(users.id, user.id));
+          return NextResponse.json(
+            { error: 'That invite link has already been used.', needsInvite: true },
+            { status: 409 },
+          );
+        }
+      }
 
       const [machine] = await db.insert(machines).values({
         userId: user.id,

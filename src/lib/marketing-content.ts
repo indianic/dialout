@@ -27,13 +27,13 @@ export const COUNTS = {
   dbTables: 19,
   /** wc -l src/ws-server/index.ts */
   wsServerLines: 1753,
-  /** grep -c '.command(' packages/devdash-agent/src/cli.ts */
+  /** grep -c '.command(' packages/dialout/src/cli.ts */
   agentCommands: 19,
   /** mobile screens under packages/devdash-mobile */
   mobileScreens: 18,
   /** AI vendors with a shipped adapter */
   aiVendors: 3,
-  /** packages/devdash-agent/package.json */
+  /** packages/dialout/package.json */
   agentVersion: '2.7.4',
 } as const;
 
@@ -287,7 +287,7 @@ export const AUDIENCES = [
   {
     title: 'Anyone who self-hosts on principle',
     body:
-      'One Postgres database and two Node processes on your own server. There is no hosted tier and no account to create with us.',
+      'One Postgres database and two Node processes on your own server. Nothing is held back for a paid tier, and self-hosting is what this is built for — an account on dialout.dev is a convenience, not the product.',
   },
 ];
 
@@ -303,7 +303,85 @@ export const INTEGRATIONS = [
   { name: 'Apache, Nginx or Caddy', body: 'Any reverse proxy that can forward a WebSocket upgrade.' },
 ];
 
-/** The four commands. Used on the homepage and in the docs. */
+/**
+ * Getting started, end to end — account first, then the machine.
+ *
+ * Written for two readers at once rather than in two versions. `plain` says
+ * what happens in words a non-technical reader can follow; `detail` and
+ * `command` are the specifics an engineer wants. Splitting these into separate
+ * pages means one of them goes stale, and it is always the plain one.
+ *
+ * The order matters and is the thing the old copy got wrong: it opened with
+ * `npm install`, which is step four. You cannot connect a machine before you
+ * have an account and a key for it to use.
+ */
+export interface GettingStartedStep {
+  title: string;
+  /** One sentence, no jargon. This is the line a non-technical reader reads. */
+  plain: string;
+  /** The specifics. Shown underneath, smaller. */
+  detail: string;
+  /** Present only on the steps that are literally a command to run. */
+  command?: string;
+  note?: string;
+  /** Where this step happens, so nobody runs step 4 on the wrong computer. */
+  where: 'browser' | 'machine';
+}
+
+export const GETTING_STARTED: GettingStartedStep[] = [
+  {
+    title: 'Get an account',
+    plain: 'Sign up on dialout.dev, or run your own copy — both give you the same thing.',
+    detail:
+      'New accounts on dialout.dev are invite-only while we help each person get set up, so ask for one and we will send you a link. If you would rather not wait, Dialout is MIT licensed: clone it, point it at a PostgreSQL database, and you are your own instance.',
+    where: 'browser',
+  },
+  {
+    title: 'Set up sign-in',
+    plain: 'Choose a 4-digit code and scan a QR code with your phone. Takes two minutes.',
+    detail:
+      'Two-factor is required, not optional, and is enforced by the API rather than only hidden in the interface. This is a tool that opens terminals on your computers — an account with one factor is not one worth having.',
+    where: 'browser',
+  },
+  {
+    title: 'Add your first computer',
+    plain:
+      'Tell Dialout which computer you want to reach — your office desktop, your home machine, whatever it is — and it gives you a key to copy.',
+    detail:
+      'Settings → Machines → Add machine, then Generate key. The key starts with mch_ and is shown once, because only its hash is stored. Name the machine something you will recognise from a phone.',
+    where: 'browser',
+  },
+  {
+    title: 'Install the agent on that computer',
+    plain: 'One command, on the computer you just added. Not on the one you are browsing from.',
+    detail:
+      'A small program that runs in the background. macOS and Linux, Node 18 or newer.',
+    command: 'npm install -g dialout',
+    note: 'Run this on the computer you want to reach',
+    where: 'machine',
+  },
+  {
+    title: 'Paste the key',
+    plain: 'It asks two questions: where your Dialout is, and the key you just copied.',
+    detail:
+      'Server URL is the WebSocket address of your instance — wss://www.dialout.dev/ws, or your own. Then it offers to start itself automatically whenever the computer boots, which is what you want on a machine you are trying to reach from somewhere else.',
+    command: 'dialout init',
+    note: 'Choose "start at boot" when it asks',
+    where: 'machine',
+  },
+  {
+    title: 'That is it',
+    plain:
+      'The computer turns green in your dashboard. You can now see its ports, open a terminal on it, and read your AI sessions — from any browser or your phone.',
+    detail:
+      'Repeat steps 3 to 5 for every other computer you want in the room. Nothing was opened on your network to make this work: the agent dials out and holds the connection open.',
+    command: 'dialout status',
+    note: 'Confirms it is connected',
+    where: 'machine',
+  },
+];
+
+/** The agent commands alone, for the docs and the install page. */
 export const INSTALL_STEPS = [
   {
     title: 'Install the agent',
@@ -334,7 +412,7 @@ export const FAQ = [
   },
   {
     q: 'Where does my data live?',
-    a: 'In your PostgreSQL database, on your server. There is no hosted tier, no telemetry and no account to create with us. Credentials, 2FA secrets and machine API keys are AES-256-GCM encrypted at rest.',
+    a: 'If you self-host — which is what Dialout is built for — everything lives in your own PostgreSQL database, on your own server, with no telemetry. If you use an account on dialout.dev instead, your data is in that instance. Either way, credentials, 2FA secrets and machine API keys are AES-256-GCM encrypted at rest.',
   },
   {
     q: 'What do I need to run it?',
@@ -351,6 +429,14 @@ export const FAQ = [
   {
     q: 'Does it work on Windows?',
     a: 'The server runs anywhere Node runs. The agent ships for macOS and Linux only, because it depends on tmux and on process inspection that has no Windows equivalent yet.',
+  },
+  {
+    q: 'How do I get started?',
+    a: 'Get an account — sign up on dialout.dev, or run your own copy from GitHub. Set a 4-digit code and two-factor. Add your first computer in Settings and copy the key it gives you. Then, on that computer, run npm install -g dialout followed by dialout init and paste the key. It turns green in your dashboard. About ten minutes end to end.',
+  },
+  {
+    q: 'Why is signing up invite-only?',
+    a: 'Because we would rather help a few people get properly set up than let a lot of people bounce off a half-configured instance. Ask for access and you will get a link. Or skip the queue entirely — the whole thing is open source and you can run it yourself today.',
   },
   {
     q: 'Is it really free?',

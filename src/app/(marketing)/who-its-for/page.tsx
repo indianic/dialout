@@ -20,7 +20,7 @@ const NOT_FOR = [
   },
   {
     t: 'You want someone else to host it',
-    b: 'There is no hosted tier. If you do not want to run a server, this is the wrong tool — though we will install it on yours.',
+    b: 'This is built to be self-hosted. There is an instance at dialout.dev you can ask for an account on, but if you never want to run a server and never want anyone to run one for you, this is the wrong tool — though we will happily install it on yours.',
   },
   {
     t: 'You are managing production fleets',

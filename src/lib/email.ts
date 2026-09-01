@@ -78,7 +78,7 @@ export function inviteEmailHtml(inviterName: string, projectName: string, appUrl
     <div style="font-size:13px; color:#6b6d7e; line-height:1.6; margin-bottom:26px;">
       Register with this email to view the project, its notes, todos, and leave comments.
     </div>
-    ${ctaButton(appUrl, 'OPEN DEVDASH')}
+    ${ctaButton(appUrl, 'OPEN DIALOUT')}
     <div style="border-top:1px solid #eef0f5; margin-top:26px; padding-top:18px; font-family:monospace; font-size:9px; color:#b6b8c6; letter-spacing:1px;">
       If you did not expect this invite, you can ignore this email.
     </div>
@@ -100,7 +100,7 @@ export function otpResetCodeEmailHtml(name: string, code: string, appUrl: string
         ${escHtml(code)}
       </div>
     </div>
-    ${ctaButton(appUrl, 'OPEN DEVDASH')}
+    ${ctaButton(appUrl, 'OPEN DIALOUT')}
     <div style="border-top:1px solid #eef0f5; margin-top:26px; padding-top:18px; font-family:monospace; font-size:9px; color:#b6b8c6; letter-spacing:1px;">
       If you did not request this, ignore this email — your code will not change.
     </div>
@@ -169,7 +169,7 @@ export function twoFactorEnabledEmailHtml(name: string, appUrl: string): string 
     <div style="font-size:13px; color:#6b6d7e; line-height:1.6; margin-bottom:26px;">
       You'll be asked for a code from your authenticator app when you log in on an untrusted device. Keep your backup codes somewhere safe.
     </div>
-    ${ctaButton(appUrl, 'OPEN DEVDASH')}
+    ${ctaButton(appUrl, 'OPEN DIALOUT')}
   `);
 }
 
@@ -274,5 +274,110 @@ export function enquiryNotifyEmailHtml(fields: EnquiryFields): string {
       Reply straight to ${escHtml(fields.email)}. The enquiry is also stored in the
       <span style="font-family:monospace;">enquiries</span> table.
     </p>
+  `);
+}
+
+// ─── Gated signup ────────────────────────────────────────────────────────────
+
+// The invite itself. The link is the credential, so this email says plainly
+// that it works once and for one address — a recipient who forwards it to a
+// colleague should learn that from the email, not from a failed signup.
+export function signupInviteEmailHtml(
+  inviterName: string,
+  recipientEmail: string,
+  link: string,
+  expiresInDays: number,
+): string {
+  return shell('YOU ARE INVITED', `
+    <div style="font-size:15px; color:#1f2033; line-height:1.6; margin-bottom:14px;">
+      <strong>${escHtml(inviterName)}</strong> has invited you to Dialout — one place to
+      reach every computer you code on, from any browser or your phone.
+    </div>
+    <div style="font-size:13px; color:#6b6d7e; line-height:1.6; margin-bottom:24px;">
+      Registration is invite-only right now, so this link is your way in.
+      It works <strong>once</strong>, only for <strong>${escHtml(recipientEmail)}</strong>,
+      and expires in ${expiresInDays} days.
+    </div>
+    ${ctaButton(link, 'CREATE MY ACCOUNT')}
+    <div style="font-size:12px; color:#6b6d7e; line-height:1.6; margin-top:22px;">
+      Setting up takes about ten minutes: create your account, add a machine, install the
+      agent on it with <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g dialout</code>,
+      and it appears in your dashboard.
+    </div>
+    <div style="border-top:1px solid #eef0f5; margin-top:26px; padding-top:18px; font-family:monospace; font-size:9px; color:#b6b8c6; letter-spacing:1px;">
+      If you were not expecting this, you can ignore this email. Nothing happens until you use the link.
+    </div>
+  `);
+}
+
+// Acknowledgement for someone who asked for access. Deliberately promises a
+// human decision rather than a timeframe — an unattended queue that promised
+// "within 24 hours" is worse than one that promised nothing.
+export function accessRequestAckEmailHtml(name: string): string {
+  return shell('REQUEST RECEIVED', `
+    <div style="font-size:15px; color:#1f2033; line-height:1.6; margin-bottom:14px;">
+      Thanks <strong>${escHtml(name)}</strong> — your request for access to Dialout is in.
+    </div>
+    <div style="font-size:13px; color:#6b6d7e; line-height:1.6; margin-bottom:8px;">
+      Someone reviews these by hand. When it is approved you will get a second email with a
+      link to create your account.
+    </div>
+    <div style="font-size:13px; color:#6b6d7e; line-height:1.6;">
+      In the meantime everything is open source, so you can also self-host it today —
+      the code and the setup guide are on GitHub.
+    </div>
+    <div style="border-top:1px solid #eef0f5; margin-top:26px; padding-top:18px; font-family:monospace; font-size:9px; color:#b6b8c6; letter-spacing:1px;">
+      Questions? Reply to this email.
+    </div>
+  `);
+}
+
+// Admin notification that a request is waiting. Carries enough to triage
+// without opening the dashboard, because the whole point of the queue is that
+// somebody actually gets to it.
+export function accessRequestAdminEmailHtml(
+  fields: { name: string; email: string; company?: string; role?: string; machineCount?: string; useCase?: string },
+  reviewUrl: string,
+): string {
+  const row = (label: string, value?: string) => value
+    ? `<tr><td style="padding:6px 12px 6px 0; font-family:monospace; font-size:10px; color:#9598a8; letter-spacing:1px; vertical-align:top; white-space:nowrap;">${label}</td><td style="padding:6px 0; font-size:13px; color:#1f2033;">${escHtml(value)}</td></tr>`
+    : '';
+  return shell('ACCESS REQUEST', `
+    <div style="font-size:15px; color:#1f2033; line-height:1.6; margin-bottom:18px;">
+      <strong>${escHtml(fields.name)}</strong> has requested access.
+    </div>
+    <table style="width:100%; border-collapse:collapse; margin-bottom:24px;">
+      ${row('EMAIL', fields.email)}
+      ${row('COMPANY', fields.company)}
+      ${row('ROLE', fields.role)}
+      ${row('MACHINES', fields.machineCount)}
+      ${row('USE CASE', fields.useCase)}
+    </table>
+    ${ctaButton(reviewUrl, 'REVIEW THE QUEUE')}
+  `);
+}
+
+// Approval. The link is a real invite token, so this is the same credential
+// rules as signupInviteEmailHtml — say so.
+export function accessApprovedEmailHtml(
+  name: string,
+  recipientEmail: string,
+  link: string,
+  expiresInDays: number,
+): string {
+  return shell('YOU ARE IN', `
+    <div style="font-size:15px; color:#1f2033; line-height:1.6; margin-bottom:14px;">
+      Good news, <strong>${escHtml(name)}</strong> — your request for Dialout access was approved.
+    </div>
+    <div style="font-size:13px; color:#6b6d7e; line-height:1.6; margin-bottom:24px;">
+      Use the link below to create your account. It works <strong>once</strong>, only for
+      <strong>${escHtml(recipientEmail)}</strong>, and expires in ${expiresInDays} days.
+    </div>
+    ${ctaButton(link, 'CREATE MY ACCOUNT')}
+    <div style="font-size:12px; color:#6b6d7e; line-height:1.6; margin-top:22px;">
+      After you sign up: add a machine in Settings, copy the key it gives you, then run
+      <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g dialout</code>
+      on that computer and paste the key when it asks. That is the whole setup.
+    </div>
   `);
 }

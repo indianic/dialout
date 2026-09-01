@@ -2,12 +2,14 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { ArrowRight } from 'lucide-react';
 import FleetPanel from '@/components/marketing/FleetPanel';
-import CopyCommand from '@/components/marketing/CopyCommand';
+import { getAppSettings } from '@/lib/app-settings';
+import GettingStarted from '@/components/marketing/GettingStarted';
+import HeroCta from '@/components/marketing/HeroCta';
 import Faq from '@/components/marketing/Faq';
 import GithubIcon from '@/components/marketing/GithubIcon';
 import {
   DIFFERENTIATORS, FEATURE_GROUPS, USE_CASES, INTEGRATIONS,
-  INSTALL_STEPS, FAQ, COUNTS, GITHUB_URL,
+  FAQ, COUNTS, GITHUB_URL,
 } from '@/lib/marketing-content';
 
 export const metadata: Metadata = {
@@ -16,7 +18,8 @@ export const metadata: Metadata = {
     'A self-hosted control room for every project on every machine you own. Ports, terminals, live previews and your AI sessions — one URL, from any browser or your phone.',
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const policy = await getAppSettings();
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────
@@ -43,18 +46,7 @@ export default function HomePage() {
                 The agent dials out, so nothing has to dial in.
               </p>
 
-              <div className="mk-cta-row" style={{ marginTop: 30 }}>
-                <Link href="/docs/quick-start" className="mk-cta">
-                  Install the agent <ArrowRight size={16} />
-                </Link>
-                <a href={GITHUB_URL} className="mk-cta-ghost" target="_blank" rel="noreferrer noopener">
-                  <GithubIcon size={15} /> View on GitHub
-                </a>
-              </div>
-
-              <p className="mk-small" style={{ marginTop: 18 }}>
-                MIT licensed. Self-hosted. No hosted tier, no account with us.
-              </p>
+              <HeroCta initialPolicy={policy} />
             </div>
 
             <FleetPanel />
@@ -304,36 +296,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Install ──────────────────────────────────────────── */}
+      {/* ── Getting started ──────────────────────────────────────
+          Replaces what used to be an "install the agent" block. That block
+          opened on `npm install`, which is step four: it assumed the reader
+          already had an account, a machine registered and a key in hand. */}
       <hr className="mk-rule" />
-      <section className="mk-section">
-        <div className="mk-wrap">
-          <div>
-            <span className="mk-eyebrow">Install</span>
-            <h2 className="mk-h2">Four commands on each machine.</h2>
-            <p className="mk-body" style={{ marginTop: 16, maxWidth: 560 }}>
-              This is the agent. The server is a separate one-time setup —{' '}
-              <Link href="/docs/installation" className="mk-link">installation guide</Link>, or{' '}
-              <Link href="/installation-service" className="mk-link">have us do it</Link>.
-            </p>
-
-            <div style={{ display: 'grid', gap: 14, marginTop: 28, maxWidth: 700 }}>
-              {INSTALL_STEPS.map((s, i) => (
-                <div key={s.command}>
-                  <div className="mk-small" style={{ marginBottom: 7 }}>
-                    <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    {'  '}
-                    {s.title}
-                  </div>
-                  <CopyCommand command={s.command} note={s.note} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <GettingStarted initialPolicy={policy} />
 
       {/* ── Commercial ───────────────────────────────────────── */}
       <hr className="mk-rule" />

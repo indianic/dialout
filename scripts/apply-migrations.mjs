@@ -37,6 +37,7 @@ const ORDER = [
   'apply-push-subscriptions.mjs',
   'apply-push-platform.mjs',
   'apply-enquiries-table.mjs',
+  'apply-gated-signup.mjs',
 ];
 
 // One-shot scripts are not migrations and must never run on every deploy.

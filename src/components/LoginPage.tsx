@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { LogoMark } from './marketing/Logo';
 import TwoFactorWizard from './TwoFactorWizard';
 import OtpInput from './OtpInput';
@@ -32,6 +32,64 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const [trustDevice, setTrustDevice] = useState(false);
   const [reset2faStep, setReset2faStep] = useState<'request' | 'confirm'>('request');
   const [reset2faCode, setReset2faCode] = useState('');
+
+  // ── Registration policy ────────────────────────────────────────────────────
+  // Three states, and the tab strip has to reflect all of them: open signup,
+  // closed with a queue to join, and closed with nothing on offer. `null` means
+  // "not answered yet" and is deliberately distinct from "closed" — rendering a
+  // closed door for the split second before the answer arrives, then swapping
+  // it for a Register tab, reads as a bug.
+  const [policy, setPolicy] = useState<{
+    signupEnabled: boolean; trialEnabled: boolean; closedSignupNote: string;
+  } | null>(null);
+  // An invite token lifted out of the URL. Present means the visitor followed
+  // a link from an email, so registration is open to them regardless of policy.
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteState, setInviteState] = useState<'none' | 'checking' | 'valid' | 'invalid'>('none');
+
+  useEffect(() => {
+    let live = true;
+    fetch('/api/public/config')
+      .then((r) => r.json())
+      .then((d) => { if (live) setPolicy(d); })
+      // Fail closed on a network error. An instance that cannot say whether it
+      // is open is not one to advertise a Register tab for.
+      .catch(() => { if (live) setPolicy({ signupEnabled: false, trialEnabled: false, closedSignupNote: '' }); });
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('invite');
+    if (!token) return;
+    setInviteToken(token);
+    setInviteState('checking');
+    fetch(`/api/public/invite?token=${encodeURIComponent(token)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d?.valid) { setInviteState('invalid'); return; }
+        setInviteState('valid');
+        // The invite is bound to one address, so the field is filled and locked
+        // rather than left for the visitor to retype — a typo here would be
+        // rejected by the server with nothing they could do about it.
+        setEmail(d.email);
+        setMode('register');
+      })
+      .catch(() => setInviteState('invalid'));
+    // Take the token out of the address bar so it does not end up in a
+    // screenshot, a bookmark, or the browser history of a shared machine.
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
+  const inviteValid = inviteState === 'valid';
+  const canRegister = inviteValid || policy?.signupEnabled === true;
+  const canRequestAccess = !canRegister && policy?.trialEnabled === true;
+
+  // The policy answer arrives after first paint, so a visitor could already be
+  // on the Register tab when it turns out to be closed. Put them back on Log in
+  // rather than leaving a form that cannot succeed.
+  useEffect(() => {
+    if (policy && mode === 'register' && !canRegister) setMode('login');
+  }, [policy, mode, canRegister]);
 
   useEffect(() => {
     setError('');
@@ -73,7 +131,14 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
       const r = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'register', name: name.trim(), email: email.trim(), otpCode, machineName: machineName.trim() }),
+        body: JSON.stringify({
+          action: 'register',
+          name: name.trim(),
+          email: email.trim(),
+          otpCode,
+          machineName: machineName.trim(),
+          ...(inviteToken ? { inviteToken } : {}),
+        }),
       });
       const data = await r.json();
       if (!r.ok) { setError(data.error || 'Registration failed'); setLoading(false); return; }
@@ -199,9 +264,12 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
     );
   }
 
+  // The Register tab only exists when registering is actually possible. A tab
+  // that leads to a 403 is worse than no tab: it reads as a broken instance
+  // rather than a closed one.
   const tabs: { key: Mode; label: string }[] = [
     { key: 'login', label: 'Log in' },
-    { key: 'register', label: 'Register' },
+    ...(canRegister ? [{ key: 'register' as Mode, label: 'Register' }] : []),
     { key: 'reset', label: 'Reset OTP' },
   ];
 
@@ -336,7 +404,21 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
 
             <div className="mb-3.5">
               <label className="label">Email</label>
-              <input type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} className="inp" autoComplete="email" />
+              <input
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="inp"
+                autoComplete="email"
+                readOnly={mode === 'register' && inviteValid}
+                style={mode === 'register' && inviteValid ? { opacity: 0.72, cursor: 'not-allowed' } : undefined}
+              />
+              {mode === 'register' && inviteValid && (
+                <p className="text-[11px] mt-1.5" style={{ color: 'var(--dim)' }}>
+                  Your invite is for this address, so it cannot be changed here.
+                </p>
+              )}
             </div>
 
             {mode === 'register' && (
@@ -379,6 +461,13 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               </div>
             )}
 
+            {inviteState === 'invalid' && (
+              <div className="flex items-start gap-1.5 mb-3 text-[12.5px]" style={{ color: 'var(--offline)', lineHeight: 1.55 }}>
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>That invite link is no longer valid — it may have been used already or expired. Ask whoever invited you for a fresh one.</span>
+              </div>
+            )}
+
             <button type="submit" className="btn-grad w-full" disabled={loading} style={{ marginTop: 4 }}>
               {loading ? <Loader2 size={17} className="spin" />
                 : mode === 'login' ? 'Log in'
@@ -398,6 +487,37 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
               </button>
             )}
           </form>
+
+          {/* The closed door. Shown only once the policy has actually answered,
+              so it never flashes on an instance where signup is open. It always
+              names a way forward — a queue to join, or the fact that the whole
+              thing is open source and can be self-hosted today — because "no"
+              on its own is where a visitor leaves. */}
+          {policy && !canRegister && mode !== 'reset' && (
+            <div
+              className="mt-5 pt-4 text-[12.5px]"
+              style={{ borderTop: '1px solid var(--hairline)', color: 'var(--muted)', lineHeight: 1.65 }}
+            >
+              {policy.closedSignupNote ? (
+                <p style={{ marginBottom: canRequestAccess ? 10 : 0 }}>{policy.closedSignupNote}</p>
+              ) : (
+                <p style={{ marginBottom: canRequestAccess ? 10 : 0 }}>
+                  New accounts are invite-only right now. If someone invited you, use the
+                  link in their email.
+                </p>
+              )}
+
+              {canRequestAccess && (
+                <a
+                  href="/early-access"
+                  className="inline-flex items-center gap-1.5 font-medium"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Request access <ArrowRight size={13} />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-center gap-1.5 text-center mt-5 text-[11px]" style={{ color: 'var(--dim)' }}>

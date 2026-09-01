@@ -951,6 +951,9 @@ input[type="date"].inp::-webkit-calendar-picker-indicator { filter: var(--calend
 /* Two-column marketing rows collapse to one on tablet and below. */
 @media (max-width: 900px) {
   .mk-hero-grid { grid-template-columns: minmax(0,1fr) !important; gap: 36px !important; }
+  /* Any explanation-beside-form layout. Collapses at the same breakpoint as the
+     hero so the marketing pages all fold at one width rather than three. */
+  .mk-split { grid-template-columns: minmax(0,1fr) !important; gap: 36px !important; }
   .mk-diff-row { grid-template-columns: 34px minmax(0,1fr) !important; gap: 16px !important; }
   .mk-diff-row > p { grid-column: 2; }
 }

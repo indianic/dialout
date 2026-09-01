@@ -41,6 +41,13 @@ export const users = pgTable('users', {
   // (reusing them lets a PIN-holder reset the 2FA lockout and brute-force TOTP).
   twoFactorAttempts: integer('two_factor_attempts').default(0),
   twoFactorLockoutUntil: text('two_factor_lockout_until'),
+
+  // Instance administrator: may open or close registration, and approve access
+  // requests. Self-hosting means there is nobody above the first account, so
+  // the migration backfills the lowest user id and `register` grants it to the
+  // very first account on an empty instance. ADMIN_EMAILS in the environment
+  // is the recovery path when that row is wrong.
+  isAdmin: boolean('is_admin').default(false),
 });
 
 export const machines = pgTable('machines', {
@@ -294,5 +301,78 @@ export const enquiries = pgTable('enquiries', {
   // Set when the admin notification email was sent. Null means it was never
   // delivered and the enquiry needs picking up out of the table by hand.
   notifiedAt: text('notified_at'),
+  createdAt: text('created_at').default(sql`now()`),
+});
+
+// ─── Gated signup ────────────────────────────────────────────────────────────
+// A self-hosted instance and a public one need opposite defaults: the person
+// who installs this wants to be the only account, while dialout.dev wants a
+// front door it can open and close. One global row settles it for both, and it
+// is deliberately NOT in user_settings — those are per-user preferences, and
+// "can strangers register" is not a preference, it is instance policy.
+//
+// Single row, id always 1. Reads go through src/lib/app-settings.ts, which
+// seeds it on first read so a fresh database has no bootstrap step.
+export const appSettings = pgTable('app_settings', {
+  id: integer('id').primaryKey().default(1),
+  // Open registration. Off by default: a new instance that is reachable before
+  // its owner has finished setting it up must not accept strangers.
+  signupEnabled: boolean('signup_enabled').default(false),
+  // Show the "request early access" route on the marketing site. Independent of
+  // signupEnabled — the usual public posture is closed signup plus an open
+  // request queue, which is exactly these two flags in opposite positions.
+  trialEnabled: boolean('trial_enabled').default(false),
+  // Copy shown on the marketing site when signup is closed, so the operator can
+  // explain the wait without a redeploy. Empty falls back to built-in wording.
+  closedSignupNote: text('closed_signup_note').default(''),
+  updatedAt: text('updated_at').default(sql`now()`),
+  updatedBy: integer('updated_by'),
+});
+
+// An invitation to create an account. The token is stored ONLY as a SHA-256
+// hash, the same rule machine_api_keys follows: a leaked database row must not
+// be redeemable. The plaintext exists once, in the email.
+//
+// Single-use is enforced by usedAt rather than by deleting the row, so an
+// admin can still see who invited whom after the fact.
+export const signupInvites = pgTable('signup_invites', {
+  id: serial('id').primaryKey(),
+  tokenHash: text('token_hash').notNull(),
+  // Locked to one address. The signup form shows it read-only, so an invite
+  // forwarded to someone else still lands on the person who was invited.
+  email: text('email').notNull(),
+  invitedBy: integer('invited_by'),          // null when the system issued it
+  // 'manual'   — a user invited a colleague from Settings
+  // 'request'  — an admin approved an early-access request
+  source: text('source').notNull().default('manual'),
+  note: text('note').default(''),
+  expiresAt: text('expires_at').notNull(),
+  usedAt: text('used_at'),
+  usedByUserId: integer('used_by_user_id'),
+  revokedAt: text('revoked_at'),
+  createdAt: text('created_at').default(sql`now()`),
+});
+
+// A request from the marketing site to be let in. Kept separate from
+// `enquiries` on purpose: an enquiry is a message someone reads and replies to,
+// while this is a queue item with a state machine and a side effect (approving
+// one mints an invite). Merging them would put a status column on a table where
+// most rows can never have a status.
+export const accessRequests = pgTable('access_requests', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  company: text('company').default(''),
+  role: text('role').default(''),
+  machineCount: text('machine_count').default(''),
+  useCase: text('use_case').default(''),
+  // 'pending' | 'approved' | 'declined'
+  status: text('status').notNull().default('pending'),
+  reviewedBy: integer('reviewed_by'),
+  reviewedAt: text('reviewed_at'),
+  // The invite minted on approval, so the queue can show whether it was used.
+  inviteId: integer('invite_id'),
+  sourcePage: text('source_page').default(''),
+  userAgent: text('user_agent').default(''),
   createdAt: text('created_at').default(sql`now()`),
 });

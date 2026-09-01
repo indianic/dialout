@@ -36,15 +36,15 @@ npm run db:studio
 
 A new column therefore means: edit `src/lib/schema.ts`, write a new `apply-*.mjs`, **and add it to `ORDER` in `scripts/apply-migrations.mjs`**. Forgetting the third step now breaks the deploy loudly at the migration step rather than producing a running app with a missing column. Never add a non-idempotent script there — they run on every single deploy. One-shot scripts (`hash-existing-pins.mjs`) are deliberately not named `apply-*`.
 
-Agent package (`packages/devdash-agent/`) has its own build/test:
+Agent package (`packages/dialout/`) has its own build/test:
 
 ```bash
-cd packages/devdash-agent
+cd packages/dialout
 npm run build           # tsc → dist/
 npm test                # build + `node --test` over test/*.test.js
 ```
 
-Two test runners exist and do not overlap: **vitest** covers `src/**/*.test.ts` (web app), **node:test** covers `packages/devdash-agent/test/*.test.js` (agent). Root `npm test` does NOT run agent tests. `vitest.config.ts` mirrors the tsconfig `@/*` → `./src/*` alias, so tests can import app code.
+Two test runners exist and do not overlap: **vitest** covers `src/**/*.test.ts` (web app), **node:test** covers `packages/dialout/test/*.test.js` (agent). Root `npm test` does NOT run agent tests. `vitest.config.ts` mirrors the tsconfig `@/*` → `./src/*` alias, so tests can import app code.
 
 Ports: Next.js on **50051**, ws-server on **50052** — same in dev and prod. Both are force-cleared on start (`scripts/kill-port.js` for the app via `lsof`; the ws-server kills its own port inline at the bottom of `src/ws-server/index.ts`).
 
@@ -55,7 +55,7 @@ Next.js 15 App Router + React 19, PostgreSQL via Drizzle ORM, Tailwind CSS 3, pl
 ```
 Browser ──HTTP──> Next.js :50051 ──HTTP (localhost, X-Internal-Token)──┐
    │                                                                   │
-   └──WS /ws/* (reverse-proxied)──> ws-server :50052 <──WSS /daemon────┴── devdash-agent
+   └──WS /ws/* (reverse-proxied)──> ws-server :50052 <──WSS /daemon────┴── dialout
                                           │                                (developer machine)
                                      PostgreSQL
 ```
@@ -64,7 +64,7 @@ Browser ──HTTP──> Next.js :50051 ──HTTP (localhost, X-Internal-Token
 
 1. **Next.js app** (`src/app/`) — UI + REST API. Holds sessions, DB writes, authorization. Never talks to agents directly.
 2. **ws-server** (`src/ws-server/index.ts`, ~1300 lines, single file) — the only process that holds agent sockets. Exposes WS upgrade paths (`/daemon`, `/terminal`, `/dashboard`, `/multiplex`) and a private HTTP relay API consumed by Next.js.
-3. **devdash-agent** (`packages/devdash-agent/`) — CLI daemon on each dev machine. Published to `https://registry.npmjs.org` as `dialout`.
+3. **dialout** (`packages/dialout/`) — CLI daemon on each dev machine. Published to `https://registry.npmjs.org` as `dialout`.
 
 ### Next.js ↔ ws-server bridge
 
@@ -98,7 +98,11 @@ Quick-launch commands (`projects/[id]/commands`) deserve extra care: those rows 
 
 ### Database — `src/lib/schema.ts`
 
-Single Drizzle schema file, camelCase properties → snake_case columns. Tables: `users`, `machines`, `machineApiKeys`, `projects`, `projectMachines`, `projectNotes`, `projectTodos`, `projectCommands`, `projectCredentials`, `projectShares`, `shareComments`, `pendingInvites`, `notifications`, `systemServices`, `terminalSessions`, `terminalChunks`, `userSettings`, `scanHistory`, `pushSubscriptions`.
+Single Drizzle schema file, camelCase properties → snake_case columns. Tables: `users`, `machines`, `machineApiKeys`, `projects`, `projectMachines`, `projectNotes`, `projectTodos`, `projectCommands`, `projectCredentials`, `projectShares`, `shareComments`, `pendingInvites`, `notifications`, `systemServices`, `terminalSessions`, `terminalChunks`, `userSettings`, `scanHistory`, `pushSubscriptions`, `enquiries`, `appSettings`, `signupInvites`, `accessRequests`.
+
+`pendingInvites` and `signupInvites` are unrelated despite the names:
+`pendingInvites` holds a project share waiting for its recipient to register,
+`signupInvites` is the credential that lets them register at all.
 
 Notes on the shape:
 - Timestamps are `text` columns defaulted to `now()`, not `timestamp`. Keep that convention.
@@ -197,11 +201,11 @@ cooldown, and a first sighting never fires — otherwise every agent reconnect w
 
 `/{WS_PATH_PREFIX}/tunnel/{machineId}/{port}/...` (port-based) or `.../{machineId}/site/{base64url}/...` (URL-based, for PHP/static vhosts). The ws-server rewrites the response so the tunneled app keeps working under a path prefix: absolute `/_next/` and `/api/` paths are rewritten in HTML/JS/CSS, and an inline script injected after `<head>` patches `fetch`, `XMLHttpRequest.open`, `history.pushState/replaceState`, anchor clicks, and the Navigation API. `Location` headers on redirects are rewritten; `content-encoding` is stripped because the body was decoded. Body cap is 10 MB. A styled placeholder page is returned for "machine offline" and "local server not running".
 
-### Agent — `packages/devdash-agent/src/`
+### Agent — `packages/dialout/src/`
 
 `cli.ts` (commander) is the largest file; `service-installer.ts` handles launchd/systemd install plus the cron watchdog. Commands: `init`, `profiles`, `use <profile>`, `start`, `stop`, `restart`, `status`, `install-service`, `uninstall-service`, `setup-cron`, `remove-cron`, `repair`, `setup-cowork`, `update`, `config show|path|reset|set`.
 
-Modules map 1:1 to daemon message types: `port-scanner`, `fs-browser`, `project-scanner`, `pty-manager`, `tmux-manager`, `command-runner`, `heartbeat`, `websocket`. Config lives at `~/.devdash-agent/config.json`; `single-instance.ts` prevents competing daemons and `checklist.ts`/`repair` diagnose stale supervisors.
+Modules map 1:1 to daemon message types: `port-scanner`, `fs-browser`, `project-scanner`, `pty-manager`, `tmux-manager`, `command-runner`, `heartbeat`, `websocket`. Config lives at `~/.dialout/config.json`; `single-instance.ts` prevents competing daemons and `checklist.ts`/`repair` diagnose stale supervisors.
 
 The agent is `os: ["darwin", "linux"]` and ships `dist/` — **build before publishing**, and keep `dist/` in sync when reviewing behavior (`src/` is the source of truth).
 
@@ -224,6 +228,30 @@ hand-maintained and not generated, so it drifts unless a route change updates
 it in the same commit — a shipped mobile app is pinned to it in a way the web
 UI never was.
 
+**Registration is gated.** Three ways to get an account, checked in `register`
+in this order: the instance has no users at all (first account wins, and becomes
+admin); open registration is on; or a valid single-use invite issued to that
+exact address. Policy lives in one global row — `app_settings`, id always 1,
+guarded by a CHECK constraint — read through `src/lib/app-settings.ts`, which
+seeds it on first read so a fresh database needs no bootstrap. It is deliberately
+**not** in `user_settings`: "may strangers register" is instance policy, not a
+preference, and the signed-out signup page has to be able to read it.
+
+Invite tokens are hashed with **plain SHA-256** (`signup-invites.ts`), not the
+salted scrypt in `pin-hash.ts`. Redemption has to *find* a row by token, so the
+digest must be deterministic; scrypt is salted and can only verify against a row
+you already have. `consumeInvite` carries `used_at IS NULL` in its WHERE clause
+and checks the row count, so two people redeeming one link cannot both get in.
+
+Admin is `users.is_admin`, backfilled to the lowest user id, with `ADMIN_EMAILS`
+as the recovery path when that row is wrong. `/api/settings/registration` answers
+**404** to a signed-in non-admin — the existence of an admin surface is not
+something to confirm.
+
+Invite links must point at **`/login?invite=…`**, never `/`. `/` is the marketing
+home page: it renders no signup form and reads no query string, so a token sent
+there is silently dropped.
+
 PIN + mandatory TOTP. `POST /api/auth` is a single action-dispatch route: `login`, `verify-2fa`, `enroll-request-code`, `enroll-verify-email`, `enroll-activate`, `register`, `request-reset`, `confirm-reset`, `reset-2fa-request`, `reset-2fa-confirm`, `switch-machine`, `add-machine`, `logout`. Session is a `jose` JWT (30 d) in the HTTP-only `devdash-session` cookie carrying `userId`, `machineId`, `email`, `name`.
 
 Everything is scoped to **user + machine** — switching machines re-mints the JWT. Sharing grants read-only access (comments allowed, optional `allowTerminal`); non-owners must not get edit paths.
@@ -240,7 +268,10 @@ PM2 runs two apps from `ecosystem.config.cjs`: `$APP_NAME` (`next start -p 50051
 
 Reverse proxy: `/` → 50051, `/ws/` → 50052 with WebSocket upgrade support.
 
-Env (`.env`, see `.env.example`): `DATABASE_URL` and `JWT_SECRET` required; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WS_URL`, `PORT`, `WS_PORT`, `WS_HOST`, `WS_SERVER_URL`, `WS_PATH_PREFIX`, `WS_INTERNAL_TOKEN`, SMTP (`SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `FROM_NAME`), and web push (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) optional. Push is disabled, not broken, when the VAPID pair is unset; the same pair must be used in dev and prod or existing subscriptions stop working.
+Env (`.env`, see `.env.example`): `DATABASE_URL` and `JWT_SECRET` required; `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WS_URL`, `PORT`, `WS_PORT`, `WS_HOST`, `WS_SERVER_URL`, `WS_PATH_PREFIX`, `WS_INTERNAL_TOKEN`, SMTP (`SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `FROM_NAME`), web push (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`), analytics
+(`NEXT_PUBLIC_GTM_ID` **or** `NEXT_PUBLIC_GA_MEASUREMENT_ID` — GTM wins if both
+are set, since loading GA4 directly *and* through a container double-counts every
+pageview; unset loads no Google script at all) and `ADMIN_EMAILS` optional. Push is disabled, not broken, when the VAPID pair is unset; the same pair must be used in dev and prod or existing subscriptions stop working.
 
 ## Setup
 
@@ -256,9 +287,9 @@ Agent, on each dev machine:
 
 ```bash
 npm install -g dialout
-devdash-agent init        # server URL + mch_… API key from Settings → Machines
-devdash-agent install-service
-devdash-agent status
+dialout init        # server URL + mch_… API key from Settings → Machines
+dialout install-service
+dialout status
 ```
 
 ## Conventions

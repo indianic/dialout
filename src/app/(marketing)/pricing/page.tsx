@@ -74,7 +74,7 @@ export default function PricingPage() {
       <PageHeader
         eyebrow="Pricing"
         title="The software is free. We sell time, not features."
-        lede="There is no hosted tier, no seat count and no feature gate. If you can run a server, you can run everything."
+        lede="No seat count, no feature gate, nothing held back for a paid tier. Run it on your own server, or ask for an account on ours — the software is the same either way, and it is free."
       />
 
       <section className="mk-section">

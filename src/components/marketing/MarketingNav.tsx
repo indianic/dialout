@@ -7,6 +7,7 @@ import { Menu, X } from 'lucide-react';
 import GithubIcon from './GithubIcon';
 import { Logo } from './Logo';
 import { GITHUB_URL } from '@/lib/marketing-content';
+import { useSignupPolicy, signupCta, type SignupPolicy } from '@/hooks/useSignupPolicy';
 
 /**
  * Navigation is deliberately short. Everything that is not one of these lives
@@ -22,9 +23,14 @@ const LINKS = [
   { href: '/enterprise', label: 'Enterprise' },
 ];
 
-export default function MarketingNav() {
+export default function MarketingNav({ initialPolicy }: { initialPolicy?: SignupPolicy | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // The primary button is the way in, so it has to match what the instance is
+  // actually offering. When neither signup nor requests are on there is no way
+  // in to offer, and the button falls back to the thing that is always true:
+  // the code is public and you can run it yourself.
+  const cta = signupCta(useSignupPolicy(initialPolicy));
 
   const isOn = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
@@ -66,8 +72,12 @@ export default function MarketingNav() {
             Log in
           </Link>
           </span>
-          <Link href="/docs/quick-start" className="mk-cta" style={{ padding: '9px 16px', fontSize: 14 }}>
-            Get started
+          <Link
+            href={cta ? cta.href : '/docs/quick-start'}
+            className="mk-cta"
+            style={{ padding: '9px 16px', fontSize: 14 }}
+          >
+            {cta ? cta.label : 'Get started'}
           </Link>
 
           <button
@@ -98,6 +108,11 @@ export default function MarketingNav() {
             <Link href="/login" className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
               Log in
             </Link>
+            {cta ? (
+              <Link href={cta.href} className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
+                {cta.label}
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </div>
