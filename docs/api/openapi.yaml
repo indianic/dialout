@@ -1,0 +1,748 @@
+openapi: 3.1.0
+
+# DevDash HTTP API — written for native clients (the React Native app, a script),
+# not as documentation of the web UI's internals.
+#
+# Hand-maintained. It is NOT generated from the route handlers, so it can drift.
+# When you change a route's shape, change it here in the same commit — a shipped
+# mobile app is pinned to this contract in a way the web UI never was.
+#
+# Coverage is deliberate rather than exhaustive: every route a mobile client
+# plausibly needs. Omitted on purpose are /tunnel (an HTTP passthrough with no
+# fixed schema), /copy, /scan, and the note/todo/comment/share CRUD, which
+# follow the same obvious shapes as the ones documented here.
+
+info:
+  title: DevDash API
+  version: '2.7.0'
+  description: |
+    Self-hosted development control room. Tracks projects across machines, and —
+    through an agent installed on each machine — provides remote terminals,
+    filesystem access, process control, and chat-form control of AI coding CLIs.
+
+    ## Authentication
+
+    Every endpoint below requires a session except where noted. There are two
+    equivalent credentials, both carrying the same JWT:
+
+    - **Cookie** (`devdash-session`) — what the web UI uses. HttpOnly.
+    - **Bearer token** — what native clients use.
+
+    To obtain a Bearer token, send `X-DevDash-Client: native` on the
+    `/auth` request. Without that header the token is issued **only** as a
+    cookie: browsers deliberately never receive it in a readable place.
+
+    Tokens last 30 days. After a week of age any authenticated `/api` request
+    returns a fresh JWT in the `X-DevDash-Session` response header (and
+    refreshes the cookie). Native clients must persist that header when it
+    appears. On a 401, log in again.
+
+    ## Login flow
+
+    Login is a two-or-three step exchange, not one call:
+
+    1. `POST /auth` `{action: "login", email, otpCode}`
+       → `{pending: "2fa"}` (challenge issued), or
+       → `{pending: "enroll"}` (2FA setup required), or
+       → `{success: true, token}` (device already trusted)
+    2. `POST /auth` `{action: "verify-2fa", code}` → `{success: true, token}`
+
+    The `pending` states carry their own short-lived cookie. A native client
+    must therefore keep a cookie jar for the login exchange even though it uses
+    a Bearer token afterwards, **or** send the pending token back explicitly.
+
+    ## Realtime
+
+    Chat and terminal streams are WebSocket, not HTTP. See `x-websocket` at the
+    bottom of this document.
+
+servers:
+  - url: https://www.dialout.dev
+    description: Production
+  - url: http://localhost:50051
+    description: Local development
+
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: devdash-session
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    Machine:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        hidden: { type: boolean }
+        terminalNameTemplate: { type: string, nullable: true }
+        terminalPreviewLines: { type: integer }
+      required: [id, name]
+
+    Project:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        port: { type: integer, nullable: true }
+        url: { type: string, nullable: true }
+        rootPath: { type: string, nullable: true }
+        techStack: { type: string, nullable: true }
+        machineId: { type: integer }
+        isRunning:
+          type: boolean
+          description: >
+            Live-checked on every request, not cached. This is why GET /projects
+            is the slowest endpoint in the API.
+        lastChecked: { type: string, nullable: true }
+      required: [id, name, machineId]
+
+    AiSessionSummary:
+      type: object
+      description: One AI coding session, whether you started it or DevDash did.
+      properties:
+        tmuxName:
+          type: string
+          description: >
+            Opaque identifier. A tmux session name for sessions you started
+            yourself, or `launch:<uuid>` for ones DevDash started. Treat it as
+            an opaque string and URL-encode it in paths.
+        kind:
+          type: string
+          enum: [claude, codex, grok]
+          description: Vendors are added over time; treat an unknown value as generic.
+        title: { type: string }
+        folder: { type: string }
+        folderPath: { type: string }
+        gitBranch: { type: string }
+        profile:
+          type: string
+          description: >
+            Which config home the CLI was started under, e.g. `default` or
+            `.iclaude`. This is how two subscriptions on one machine stay
+            distinguishable. DevDash never sees the account itself.
+        status:
+          type: string
+          enum: [working, waiting_input, waiting_approval, idle]
+        origin:
+          type: string
+          enum: [tmux, launched]
+          description: >
+            `tmux` = started by the user in their own terminal; `launched` =
+            started by DevDash. Only `launched` sessions can be deleted.
+        permissionMode:
+          type: string
+          enum: [plan, default, acceptEdits, dontAsk]
+          description: Present on launched sessions only. Fixed at launch.
+        updatedAt: { type: integer, description: Unix milliseconds }
+        machineId:
+          type: integer
+          description: Present when listing with `machineId=all`.
+        machineName:
+          type: string
+          description: Present when listing with `machineId=all`.
+      required: [tmuxName, kind, title, status, origin]
+
+    AiEvent:
+      type: object
+      description: >
+        One normalized conversation event. The same shape regardless of which
+        CLI produced it — a client never needs vendor-specific handling.
+        Delivered over WebSocket, not HTTP.
+      properties:
+        kind:
+          type: string
+          enum: [message, tool_call, tool_result, thinking, state]
+        role:
+          type: string
+          enum: [user, assistant]
+          description: Present when kind is `message`.
+        text: { type: string, description: Present for `message` and `thinking`. }
+        name: { type: string, description: Tool name, for `tool_call`. }
+        summary:
+          type: string
+          description: >
+            Short human string for a `tool_call`, e.g. "Bash: npm test" or
+            "Edit src/index.ts". Pre-rendered so a client never has to
+            understand a tool's input schema.
+        input: { description: Raw tool input, for `tool_call`. }
+        forId: { type: string, description: The tool_call id a `tool_result` answers. }
+        ok: { type: boolean, description: Whether a `tool_result` succeeded. }
+        preview:
+          type: string
+          description: Tool output, truncated to 2000 characters server-side.
+        id: { type: string }
+        at: { type: string, format: date-time }
+      required: [kind]
+
+    AiCommand:
+      type: object
+      description: One slash command the CLI in this session accepts.
+      properties:
+        name: { type: string, example: /review }
+        alias: { type: string }
+        description: { type: string }
+        source:
+          type: string
+          enum: [user, project, plugin, builtin]
+          description: >
+            Where it came from. `project` commands are the repo's own and are
+            usually what the user wants first; `builtin` are the CLI's.
+      required: [name, description, source]
+
+    McpServerInfo:
+      type: object
+      description: One MCP server configured for this session.
+      properties:
+        name: { type: string }
+        scope: { type: string, enum: [global, project] }
+        transport: { type: string, enum: [stdio, http] }
+        enabled: { type: boolean }
+        origin:
+          type: string
+          description: Which config file declared it, for "why is this here?".
+        command: { type: string }
+        args:
+          type: array
+          items: { type: string }
+          description: >
+            Token-shaped arguments are redacted by the agent before they leave
+            the machine. Never render these as if they were safe to copy.
+      required: [name, scope, transport, enabled, origin]
+
+    AiCapabilities:
+      type: object
+      properties:
+        kind: { type: string }
+        commands:
+          type: array
+          items: { $ref: '#/components/schemas/AiCommand' }
+        mcpServers:
+          type: array
+          items: { $ref: '#/components/schemas/McpServerInfo' }
+        scannedAt: { type: string, format: date-time }
+        unavailable:
+          type: boolean
+          description: >
+            The agent could not scan — offline, or the CLI's config is not
+            readable. Distinct from "this session has no commands".
+      required: [kind, commands, mcpServers, scannedAt]
+
+    TerminalSession:
+      type: object
+      properties:
+        id: { type: integer }
+        machineId: { type: integer }
+        tmuxName: { type: string }
+        isLive: { type: boolean }
+        origin:
+          type: string
+          enum: [native, browser]
+          description: >
+            `native` = a terminal window on the machine; `browser` = started in
+            DevDash. The Terminals UI splits on this.
+        folder: { type: string, nullable: true }
+        gitBranch: { type: string, nullable: true }
+        lastSeenAt:
+          type: string
+          nullable: true
+          description: >
+            Server receipt time. Use this for staleness, NOT lastActiveAt,
+            which is tmux activity and stays stale for idle-but-alive shells.
+        lastActiveAt: { type: string, nullable: true }
+      required: [id, machineId, tmuxName]
+
+  responses:
+    Unauthorized:
+      description: No valid session.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: >
+        Authenticated, but not permitted — usually a machine you do not own,
+        or 2FA enrollment not completed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    MachineOffline:
+      description: The machine's agent is not connected, so it cannot be asked.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+  /api/auth:
+    post:
+      summary: Authentication and session actions
+      security: []
+      description: |
+        Single action-dispatch endpoint. `action` selects the operation.
+
+        Send `X-DevDash-Client: native` to receive the session JWT in the
+        response body as `token`. Without it, the session is issued only as an
+        HttpOnly cookie.
+      parameters:
+        - in: header
+          name: X-DevDash-Client
+          schema: { type: string, enum: [native] }
+          description: Set to `native` to receive the raw token in the body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum:
+                    [login, verify-2fa, enroll-request-code, enroll-verify-email,
+                     enroll-activate, register, request-reset, confirm-reset,
+                     reset-2fa-request, reset-2fa-confirm, switch-machine,
+                     add-machine, logout]
+                email: { type: string }
+                otpCode: { type: string, description: The 4-digit PIN. }
+                code: { type: string, description: The 6-digit TOTP code. }
+                pendingToken:
+                  type: string
+                  description: >
+                    Native clients without a cookie jar send this back on
+                    `verify-2fa` (and enroll steps) instead of the pending cookie.
+                    Issued in the login/`enroll` response as `pendingToken`.
+                trustDevice: { type: boolean }
+                machineId: { type: integer, description: For switch-machine. }
+              required: [action]
+      responses:
+        '200':
+          description: >
+            Shape depends on the action and on progress through the login flow.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  pending:
+                    type: string
+                    enum: ['2fa', enroll]
+                    description: Login is incomplete; another step is required.
+                  pendingToken:
+                    type: string
+                    description: >
+                      Short-lived token for the next login step. Present for
+                      native clients so they do not need a cookie jar.
+                  token:
+                    type: string
+                    description: >
+                      The session JWT. Present ONLY when the request carried
+                      `X-DevDash-Client: native`.
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      email: { type: string }
+                  machines:
+                    type: array
+                    items: { $ref: '#/components/schemas/Machine' }
+                  backupCodes:
+                    type: array
+                    items: { type: string }
+                    description: Returned once, on enroll-activate. Not recoverable.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429':
+          description: Rate limited or locked out. The message names the wait.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      summary: Current session
+      description: >
+        Returns the signed-in user, their machine, and enrollment state. The
+        cheapest way to check whether a stored token is still valid.
+      responses:
+        '200':
+          description: Session info.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/me:
+    get:
+      summary: Native session bootstrap
+      description: >
+        Round-trips the JWT against the database and returns the signed-in user
+        plus every owned machine with a live `isOnline` flag. Native clients
+        call this on cold start to restore a stored token.
+      responses:
+        '200':
+          description: User and machines.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      email: { type: string }
+                  machineId: { type: integer, description: The machine bound to this JWT. }
+                  machines:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: '#/components/schemas/Machine' }
+                        - type: object
+                          properties:
+                            isOnline: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/machines:
+    get:
+      summary: List the user's machines
+      responses:
+        '200':
+          description: Machines.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Machine' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/projects:
+    get:
+      summary: List projects, with a live port check on every one
+      description: >
+        Every port is checked on each request — through the machine's agent when
+        it is online, or by a local TCP probe otherwise. This is intentionally
+        expensive and is the known hot path. A mobile client should not poll it
+        aggressively.
+
+        `machineId=all` lists every owned project without the live probe and
+        uses the last cached `isRunning`. Native clients should use that, then
+        take live updates from the `port_status` WebSocket event.
+      parameters:
+        - in: query
+          name: machineId
+          schema:
+            oneOf:
+              - { type: integer }
+              - { type: string, enum: [all] }
+          description: Omit to use the JWT's current machine. Native clients send `all`.
+      responses:
+        '200':
+          description: Projects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: Create a project
+      responses:
+        '200': { description: Created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/projects/{id}/process:
+    post:
+      summary: Start, stop or restart a project
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [start, stop, restart] }
+              required: [action]
+      responses:
+        '200': { description: Command dispatched to the agent. }
+        '503': { $ref: '#/components/responses/MachineOffline' }
+
+  /api/ai-sessions:
+    get:
+      summary: List AI coding sessions
+      parameters:
+        - in: query
+          name: machineId
+          schema:
+            oneOf:
+              - { type: integer }
+              - { type: string, enum: [all] }
+          description: >
+            A machine id lists that machine. `all` fans out across every
+            machine the caller owns, in parallel, and tags each row with
+            `machineId` / `machineName`. Omitting the param keeps the
+            session's current machine so existing web callers do not silently
+            widen. Native clients should send `all`.
+      responses:
+        '200':
+          description: >
+            Sessions, plus reachability. For one machine, `offline: true` with
+            an empty list means "cannot tell", not "none running". For `all`,
+            `machines[]` reports that per machine — do not collapse it into
+            a single boolean in the UI.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/AiSessionSummary' }
+                  machines:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        offline: { type: boolean }
+                  offline: { type: boolean }
+                required: [sessions, offline]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: Start a new AI session
+      description: |
+        Starts an agent CLI on the machine, in a folder, with a first message.
+
+        `permissionMode` is chosen once and applies for the whole session.
+        DevDash **cannot** prompt for per-step approval — that is a limitation
+        of the CLI, not of this API — so choose a level that is safe to leave
+        unattended. `bypassPermissions` is not accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machineId: { type: integer }
+                kind: { type: string, enum: [claude, codex], default: claude }
+                cwd:
+                  type: string
+                  description: Absolute path on the machine. Relative paths are rejected.
+                prompt: { type: string }
+                permissionMode:
+                  type: string
+                  enum: [plan, default, acceptEdits, dontAsk]
+                  default: default
+              required: [cwd, prompt]
+      responses:
+        '200':
+          description: Started.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: The `tmuxName` to use for subsequent calls.
+        '400': { description: Missing folder or prompt. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/MachineOffline' }
+
+  /api/ai-sessions/{machineId}/{tmuxName}:
+    parameters:
+      - { in: path, name: machineId, required: true, schema: { type: integer } }
+      - in: path
+        name: tmuxName
+        required: true
+        schema: { type: string }
+        description: URL-encoded. Launched ids contain a colon.
+    post:
+      summary: Open, close, or send input to a session
+      description: |
+        - `open` — start tailing. Events then arrive over the WebSocket, not here.
+        - `close` — stop tailing. Call it when leaving the screen; the agent
+          stops polling the transcript when nobody is watching.
+        - `input` — send text. For a session started in a terminal this becomes
+          keystrokes, so a bare `y` answers a prompt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [open, close, input] }
+                text: { type: string, description: Required for `input`. }
+              required: [action]
+      responses:
+        '200': { description: Accepted. }
+        '400': { description: Unknown action. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/MachineOffline' }
+    delete:
+      summary: Delete a launched session
+      description: >
+        Only sessions with `origin: launched` can be deleted. A terminal session
+        belongs to the user's own shell and is not DevDash's to end.
+      responses:
+        '200': { description: Deleted. }
+        '400': { description: Not a launched session. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/ai-sessions/{machineId}/{tmuxName}/capabilities:
+    get:
+      summary: Slash commands and MCP servers available in this session
+      description: |
+        What this session can actually do — the CLI's slash commands and its
+        configured MCP servers, discovered on the machine by the agent.
+
+        Scanned on demand and cached per page load, not streamed: it changes
+        when config files change, not turn by turn. Fetch it lazily, when the
+        user opens the command or MCP surface, rather than with the session list.
+      parameters:
+        - { in: path, name: machineId, required: true, schema: { type: integer } }
+        - { in: path, name: tmuxName, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Capabilities, possibly marked unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AiCapabilities' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/MachineOffline' }
+
+  /api/terminals:
+    get:
+      summary: List terminal sessions
+      parameters:
+        - in: query
+          name: machineId
+          schema:
+            oneOf:
+              - { type: integer }
+              - { type: string, enum: [all] }
+          description: Same scoping as `/api/ai-sessions`. Native clients send `all`.
+      responses:
+        '200':
+          description: Sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TerminalSession' }
+
+  /api/browse:
+    post:
+      summary: List a directory on a machine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                machineId: { type: integer }
+                path: { type: string }
+      responses:
+        '200':
+          description: Directory entries.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/MachineOffline' }
+
+  /api/push/subscribe:
+    get:
+      summary: Web push configuration
+      description: >
+        Web Push (VAPID) for a browser or installed PWA, or FCM/APNs for a
+        native app. Native clients POST `{platform: "fcm"|"apns", token}`.
+        Delivery is a no-op until `FIREBASE_SERVICE_ACCOUNT` is set; missing
+        config disables push rather than breaking the rest of the app.
+      responses:
+        '200':
+          description: Whether push is configured, and the VAPID public key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  publicKey: { type: string }
+    post:
+      summary: Register a browser push subscription
+      responses:
+        '200': { description: Registered. }
+    delete:
+      summary: Remove a push subscription
+      responses:
+        '200': { description: Removed. }
+
+  /api/stats:
+    get:
+      summary: Dashboard counters
+      responses:
+        '200': { description: Counts. }
+
+# --- WebSocket ---------------------------------------------------------------
+# Not expressible in OpenAPI, documented here because a client cannot be built
+# without it.
+x-websocket:
+  base: wss://www.dialout.dev/ws
+  authentication: |
+    Every path requires a valid session on the upgrade request. Two ways, same
+    JWT:
+      - a `devdash-session` cookie (what browsers send automatically)
+      - a `?token=<jwt>` query parameter (for native clients)
+
+    An unauthenticated upgrade is refused with HTTP 401, and requesting a
+    machine you do not own is refused with 403. Passing `?userId=` means
+    nothing; identity comes from the signature.
+  paths:
+    /dashboard:
+      description: |
+        Live dashboard events, scoped to your own account.
+      query: 'token (native clients only)'
+      serverEvents:
+        - type: machine_online
+          shape: '{ type, machineId }'
+        - type: machine_offline
+          shape: '{ type, machineId }'
+        - type: machine_status_sync
+          shape: '{ type, machines: number[] }'
+        - type: port_status
+          shape: '{ type, data: { projectId, isRunning } }'
+        - type: notification
+          shape: '{ type, data }'
+        - type: ai_session_list
+          shape: '{ type, machineId, sessions: AiSessionSummary[] }'
+        - type: ai_session_events
+          shape: '{ type, machineId, tmuxName, events: AiEvent[], status }'
+          note: >
+            The chat stream. Arrives only after POSTing `action: "open"` for
+            that session. Carries conversation content — treat it as
+            sensitive and do not log it.
+    /multiplex:
+      description: |
+        One socket carrying every PTY session plus dashboard events. This is
+        what a terminal UI attaches to. Requires `machineId`, and the machine
+        must be one you own.
+      query: 'machineId (required), token (native clients only)'
+      note: >
+        Terminal payloads are raw ANSI. There is no pre-parsed form; the
+        React Native app hosts xterm.js — the same emulator the web app uses —
+        inside a WebView.

@@ -1,0 +1,233 @@
+/* The AI chat. Inline styles cannot express media queries or ::after, which is
+   why this file exists alongside the components. Every colour is a token. */
+
+.aic-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;          /* the page must never scroll sideways */
+  position: relative;
+  padding: 14px 13px;
+  /* Chrome's scroll anchoring fights streaming content and jitters. */
+  overflow-anchor: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.aic-stack { display: grid; gap: 13px; }
+/* Grid and flex children default to min-width:auto, so ONE long token — a path,
+   a stack frame, a base64 blob — sets the column minimum and drags the page. */
+.aic-stack > * { min-width: 0; }
+
+.aic-user {
+  justify-self: end;
+  max-width: 80%;
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-ring);
+  border-radius: 14px 14px 4px 14px;
+  padding: 9px 13px;
+  color: var(--txt);
+  font-size: 14.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.aic-user.aic-pending { opacity: .55; }
+.aic-failed { color: var(--offline); font-size: 11.5px; margin-top: 4px; }
+
+.aic-msg { color: var(--txt); font-size: 14.5px; line-height: 1.65; overflow-wrap: anywhere; }
+.aic-msg > *:first-child { margin-top: 0; }
+.aic-msg > *:last-child { margin-bottom: 0; }
+.aic-msg h1, .aic-msg h2, .aic-msg h3, .aic-msg h4 {
+  margin: 14px 0 6px; font-size: 15px; font-weight: 600; line-height: 1.4;
+}
+.aic-msg p { margin: 0 0 9px; }
+/* Tailwind's Preflight sets list-style:none on every ul/ol, so markdown lists
+   arrive unmarked and an ordered list silently loses its numbers. */
+.aic-msg ul { margin: 0 0 9px; padding-left: 20px; list-style: disc; }
+.aic-msg ol { margin: 0 0 9px; padding-left: 22px; list-style: decimal; }
+.aic-msg li { margin: 3px 0; }
+.aic-msg li::marker { color: var(--dim); }
+/* GFM task lists carry their own checkbox — a bullet as well reads as a typo. */
+.aic-msg li.task-list-item { list-style: none; margin-left: -18px; }
+.aic-msg li.task-list-item input { margin-right: 7px; }
+.aic-msg blockquote {
+  margin: 0 0 9px; padding-left: 11px;
+  border-left: 3px solid var(--b2); color: var(--muted);
+}
+.aic-msg a { color: var(--accent); text-decoration: underline; }
+.aic-msg code {
+  background: var(--glass-strong); padding: 1px 5px; border-radius: 5px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px;
+}
+/* Code and tables scroll INSIDE their own box, never dragging the viewport. */
+.aic-msg pre {
+  background: var(--bg-sub); border: 1px solid var(--b1); border-radius: 9px;
+  padding: 11px 13px; margin: 0 0 9px; overflow-x: auto; max-width: 100%;
+  font-size: 12px; line-height: 1.6;
+}
+.aic-msg pre code { background: none; padding: 0; font-size: 12px; }
+.aic-tablewrap { overflow-x: auto; max-width: 100%; margin: 0 0 9px; }
+.aic-msg table { border-collapse: collapse; font-size: 13px; }
+.aic-msg th, .aic-msg td { border: 1px solid var(--b1); padding: 5px 9px; text-align: left; }
+
+.aic-rule {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+}
+.aic-rule::after { content: ""; flex: 1; height: 1px; background: var(--b1); }
+
+.aic-tool { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.aic-tool .aic-name { font-family: 'JetBrains Mono', ui-monospace, monospace; flex: none; }
+.aic-tool .aic-path {
+  color: var(--dim); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.aic-chip {
+  width: 21px; height: 21px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 11px;
+}
+.aic-res { font-size: 12px; color: var(--dim); padding-left: 29px; }
+.aic-res summary { cursor: pointer; }
+.aic-res pre {
+  margin-top: 6px; padding: 10px; background: var(--bg-sub);
+  border-radius: 8px; overflow-x: auto; font-size: 11.5px; line-height: 1.6;
+}
+.aic-think {
+  font-size: 12px; color: var(--dim);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.aic-think summary { cursor: pointer; }
+
+.aic-status {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--static);
+}
+.aic-status::before, .aic-status::after {
+  content: ""; flex: 1; height: 1px; background: var(--b2);
+}
+
+.aic-pill {
+  position: sticky; bottom: 8px;
+  justify-self: center; width: max-content;
+  background: var(--card); border: 1px solid var(--b2); border-radius: 999px;
+  padding: 6px 13px; font-size: 11.5px; color: var(--txt);
+  box-shadow: 0 6px 18px var(--shadow); cursor: pointer;
+}
+
+/* --- composer --- */
+/* The composer is a flex sibling of a flex:1 chat, so ANY change to its height
+   resizes the conversation. That is why the popover below is an overlay rather
+   than a row: as a grid child it made the chat jump every time the menu
+   opened. Anything the + menu grows into later must overlay too. */
+.aic-composer {
+  position: relative;
+  flex: none;
+  border-top: 1px solid var(--b1);
+  background: var(--card);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  /* Keeps the last row clear of the iOS home indicator. */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+.aic-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  z-index: 20;
+  background: var(--card); border: 1px solid var(--b2); border-radius: 13px;
+  padding: 5px; margin-bottom: 8px; box-shadow: 0 12px 30px var(--shadow); width: 250px;
+}
+.aic-pi {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: 9px; font-size: 13px; color: var(--txt);
+  background: none; border: 0; text-align: left; cursor: pointer;
+}
+.aic-pi:disabled { color: var(--dim); cursor: default; }
+.aic-pi .aic-soon {
+  margin-left: auto; font-size: 10px; color: var(--dim);
+  border: 1px solid var(--b1); border-radius: 5px; padding: 1px 5px;
+}
+.aic-pi .aic-sw { margin-left: auto; font-size: 11px; color: var(--accent); }
+
+@media (max-width: 640px) {
+  .aic-scroll { padding: 10px; }
+  .aic-user  { max-width: 88%; }
+}
+@media (min-width: 1025px) {
+  .aic-stack { max-width: 860px; margin: 0 auto; width: 100%; }
+}
+
+/* --- command picker + MCP panel ---------------------------------------
+   Both are overlays anchored to the composer's top edge, for the same
+   reason the + popover is: the composer is a flex sibling of a flex:1
+   chat, so a layout row here resizes the conversation. */
+.aic-sheet {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  right: 12px;
+  z-index: 25;
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  overscroll-behavior: contain;      /* stop the chat scrolling behind it */
+  background: var(--card);
+  border: 1px solid var(--b2);
+  border-radius: 13px;
+  margin-bottom: 8px;
+  box-shadow: 0 12px 30px var(--shadow);
+  padding: 5px;
+}
+
+.aic-cmd {
+  display: flex; align-items: baseline; gap: 9px; width: 100%;
+  padding: 8px 10px; border-radius: 9px; border: 0; background: none;
+  text-align: left; cursor: pointer; color: var(--txt); min-width: 0;
+}
+.aic-cmd:hover, .aic-cmd[aria-selected="true"] { background: var(--accent-weak); }
+.aic-cmd .aic-cmd-name {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px; flex: none;
+}
+.aic-cmd .aic-cmd-desc {
+  color: var(--dim); font-size: 12px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.aic-cmd .aic-cmd-src {
+  margin-left: auto; flex: none; font-size: 10px; color: var(--dim);
+  border: 1px solid var(--b1); border-radius: 5px; padding: 1px 5px;
+}
+
+.aic-sheet-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px 5px; font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--dim);
+}
+.aic-sheet-head button {
+  margin-left: auto; font-size: 11px; color: var(--accent);
+  background: none; border: 0; cursor: pointer; text-transform: none;
+  letter-spacing: 0;
+}
+.aic-sheet-empty { padding: 14px 12px; color: var(--dim); font-size: 12.5px; }
+
+.aic-mcp { padding: 8px 10px; border-radius: 9px; min-width: 0; }
+.aic-mcp + .aic-mcp { border-top: 1px solid var(--b1); border-radius: 0; }
+.aic-mcp-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aic-mcp-name {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px; color: var(--txt);
+}
+.aic-mcp-tag {
+  font-size: 10px; color: var(--dim);
+  border: 1px solid var(--b1); border-radius: 5px; padding: 1px 5px; flex: none;
+}
+.aic-mcp-off { color: var(--offline); border-color: var(--offline); }
+.aic-mcp-cmd {
+  margin-top: 3px; font-size: 11.5px; color: var(--dim);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .aic-sheet { left: 8px; right: 8px; max-height: 42vh; }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"fs-browser.d.ts","sourceRoot":"","sources":["../src/fs-browser.ts"],"names":[],"mappings":"AAGA,MAAM,WAAW,QAAQ;IACvB,IAAI,EAAE,MAAM,CAAC;IACb,IAAI,EAAE,WAAW,GAAG,MAAM,CAAC;CAC5B;AAED,wBAAgB,aAAa,CAAC,OAAO,EAAE,MAAM,GAAG,QAAQ,EAAE,CAwBzD"}

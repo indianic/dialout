@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "browser-connect": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "browserconnect"
+      ]
+    }
+  }
+}

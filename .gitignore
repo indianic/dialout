@@ -1,0 +1,28 @@
+node_modules/
+packages/devdash-shared/dist/
+.next/
+out/
+data/
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Per-package lockfiles. The root lockfile is the tracked one: the agent is a
+# workspace member so it is covered there, and the mobile package's own lock
+# still resolves @indianic/* through a registry that this project no longer
+# uses. Regenerate and track that one only once @dialout/shared is published.
+packages/*/package-lock.json
+
+# OS / editor noise
+.DS_Store
+**/.DS_Store
+
+# Claude / OMC tooling
+.omc/
+.claude/
+.superpowers/
+
+# Dialout launch — real deploy credentials, never commit
+.dialout-deploy.local.env
+*.local.env

@@ -1,0 +1,96 @@
+# Mobile App Identity
+
+**Date:** 2026-08-31
+**Package:** `packages/devdash-mobile` — Expo SDK 57, iOS and Android.
+
+## Name
+
+| Field | Value |
+| --- | --- |
+| Display name | **Dialout** |
+| Dev variant | **Dialout Dev** |
+| App Store name | Dialout |
+| Subtitle (30 char max) | `Your machines, one room` (23) |
+| Android short label | Dialout |
+
+The current config already ships two variants with separate bundle identifiers so both sit on one phone (`app.config.js`, keyed on `APP_VARIANT`). Keep that. Under the new name the display names become `Dialout` and `Dialout Dev`; the identifiers can stay `com.indianic.devdash` and `.dev` for now — see the rename-cost table in [naming-and-domain.md](naming-and-domain.md) for why changing the Apple bundle ID is the expensive one.
+
+**Store subtitle and keywords.** Avoid the bare word "dialout" as your only keyword — it collides with Linux serial-port results. Lead with the job: `self-hosted`, `dev server`, `ssh terminal`, `tmux`, `port monitor`, `remote development`.
+
+## What is wrong with the icon today
+
+The shipped `assets/icon.png` has **its construction guides baked into the artwork** — dashed centre lines, two concentric circles and a crosshair are all visible in the exported 1024px PNG. It also uses a blue gradient, which the product's own design system forbids. This is on every installed device now and should be the first thing fixed.
+
+The `icon-dev.png` variant (822 KB) has the same problem at a larger file size.
+
+## Icon construction
+
+One mark, three exports. Build it once at 1024×1024 from the 24-unit grid in [brand-guidelines.md](brand-guidelines.md), scaled ×42.67.
+
+- **Ground:** `#0c0e13` (terminal black), full bleed.
+- **Mark:** white `#ffffff`, chevron stroke `128px` at 1024 scale, round caps and joins, dot radius `74px`.
+- **Optical placement:** centre the *chevron's visual mass*, not its bounding box. A chevron sits heavy at the bottom, so nudge the whole group up by roughly 2% of canvas height.
+- **No gradient, no shadow, no bevel, no guides.**
+
+### iOS
+
+| Requirement | Value |
+| --- | --- |
+| Size | 1024×1024 |
+| Alpha channel | **None.** iOS rejects icons with transparency. |
+| Corners | **Square.** iOS applies its own mask — do not pre-round. |
+| Safe area | Keep the mark inside the centre 80%; the mask crops corners. |
+
+### Android adaptive
+
+Android composites a foreground over a background and then masks the result, and the mask can be a circle, squircle, or teardrop depending on the launcher.
+
+| Layer | File | Rule |
+| --- | --- | --- |
+| Background | `android-icon-background.png` | Flat `#17191f`. No detail — it gets cropped unpredictably. |
+| Foreground | `android-icon-foreground.png` | 1024×1024 with the mark inside the **centre 66%** (the guaranteed-visible safe zone). Anything outside may be masked away. |
+| Monochrome | `android-icon-monochrome.png` | Solid white mark on transparent, for themed icons. Silhouette only — no color, no gradient. |
+
+The current `app.json` sets `adaptiveIcon.backgroundColor` to `#17191f`. Keep it, but note it differs from the splash's `#0c0e13`; pick one for both. **Use `#0c0e13`** — it matches the terminal ground and the rest of the brand.
+
+### Splash
+
+Current config: `splash-icon.png` at `imageWidth: 180`, `resizeMode: contain`, background `#0c0e13` in both themes. That is correct and needs no change beyond swapping in the clean mark. Keep the dark background in light mode too — the app opens into a dark product.
+
+### Notification icon (Android)
+
+Android renders notification icons as a **silhouette**: every non-transparent pixel becomes white. Supply the monochrome chevron on transparent at 96×96. A full-color icon here renders as a white blob.
+
+## Export checklist
+
+Before shipping any icon, confirm every line:
+
+- [ ] Opened the exported PNG at 100% — no guides, no stray anchor points, no half-pixel edges
+- [ ] Viewed at 16×16 — the chevron still reads; if not, the dot is dropped
+- [ ] iOS export has **no alpha channel** and **square corners**
+- [ ] Android foreground keeps the mark inside the centre 66%
+- [ ] Monochrome version is white-on-transparent only
+- [ ] No gradient anywhere
+- [ ] File sizes are sane — the current `icon-dev.png` is 822 KB for a two-color mark, which means it was exported from a raster source rather than the vector
+
+## Where these files live
+
+```
+packages/devdash-mobile/assets/
+  icon.png                          1024×1024, no alpha      (iOS + fallback)
+  icon-dev.png                      same, dev variant tint
+  android-icon-background.png       flat #0c0e13
+  android-icon-foreground.png       mark, centre 66%
+  android-icon-foreground-dev.png   dev variant
+  android-icon-monochrome.png       white on transparent
+  splash-icon.png                   mark only, 180pt wide
+  favicon.png                       32×32 web fallback
+```
+
+Web equivalents live in `public/` — `favicon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` — and are regenerated by `scripts/generate-pwa-icons.js`. **Update that script's source when the mark changes**, or the PWA icons will silently drift from the mobile ones.
+
+## Distinguishing the Dev variant
+
+The two apps sit side by side on one phone and must be told apart at a glance on a home screen.
+
+**Do it with ground color, not by changing the mark.** Dev keeps the identical white chevron on a distinctly different ground — `#a55a00` (the waiting amber) is the recommendation, since it is already in the palette, is clearly not the production black, and does not collide with the green/red that mean running and offline. Do not add a "DEV" text badge; it is unreadable at icon size and looks like a watermark.

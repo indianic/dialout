@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose something Dialout should do that it does not do today
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: |
+        What are you doing today instead? Describe the workaround, not the
+        feature — the workaround is what tells us whether the feature is right.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "another tool already does this, here is how".
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does this hold up against the core constraint?
+      description: |
+        The agent connects **outbound only**. No inbound ports, no VPN, no port
+        forwarding on developer machines. Features that need an inbound
+        connection to a developer machine are out of scope by design.
+      options:
+        - label: This works without opening an inbound port on a developer machine

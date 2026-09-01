@@ -1,0 +1,956 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+/* ════════════════════════════════════════════════════════════════
+   DESIGN TOKENS — light-first, one blue, status-only color
+   ════════════════════════════════════════════════════════════════ */
+
+/* Light is the primary design target: DevDash is read in an office, on a
+   phone, next to a browser full of white pages — not in a dark room. Dark is
+   a real second theme, not an afterthought, because terminals live here too.
+
+   Color carries meaning, never decoration. Blue = interactive. Green/amber/red
+   = the state of a thing that is running. Nothing else is colored. The old
+   indigo->violet->fuchsia gradient was applied to buttons, nav stripes, icon
+   tiles and progress bars alike, which left the UI with no way to say
+   "this one matters".
+
+   Every text token below is measured against its own background: --muted
+   5.9:1, --dim 4.6:1, --accent 5.9:1, and each status color >=5:1 on light.
+   If you add a value here, measure it. */
+
+:root, [data-theme="light"] {
+  --bg:        #fafafa;
+  --bg-sub:    #f2f3f5;
+  --card:      #ffffff;
+  --card-h:    #f7f8fa;
+  --b1:        rgba(20,22,28,.08);
+  --b2:        rgba(20,22,28,.14);
+  --b3:        rgba(20,22,28,.26);
+  --txt:       #1c1f27;
+  --muted:     #5b6274;
+  --dim:       #6b7385;
+  --white:     #ffffff;
+  --black:     #000000;
+
+  --inp-bg:    rgba(20,22,28,.025);
+  --inp-ph:    #6b7385;
+  --modal-bg:  #ffffff;
+  --overlay:   rgba(18,20,26,.45);
+
+  --glass:        rgba(20,22,28,.04);
+  --glass-strong: rgba(20,22,28,.07);
+  --glass-border: rgba(20,22,28,.09);
+  --shadow:       rgba(20,25,45,.12);
+
+  /* One interactive blue. --accent is the readable-as-text value; --accent-solid
+     is dark enough to carry white text on a filled button. */
+  --accent:        #1a56db;
+  --accent-solid:  #1a56db;
+  --accent-weak:   rgba(26,86,219,.09);
+  --accent-ring:   rgba(26,86,219,.45);
+
+  /* The primary CTA is ink, not brand color — a black pill reads as "the
+     action" without spending the blue, which is then free to mean "link". */
+  --cta:     #17191f;
+  --cta-fg:  #ffffff;
+  --cta-h:   #2a2d36;
+
+  /* --grad is kept as a token name because 60+ call sites use it for accent
+     fills (nav indicator, progress sweep, icon tiles). It is a flat color now.
+     Gradients are not part of this system. */
+  --g1: #1a56db;
+  --g2: #1a56db;
+  --g3: #1a56db;
+  --grad:      var(--accent);
+  --grad-soft: var(--accent-weak);
+
+  --live:    #0f7a3d;
+  --offline: #c2273f;
+  --static:  #a55a00;
+  --info:    #1a56db;
+
+  /* Tool-trace accents. The palette is otherwise monochrome plus one blue;
+     these two exist so a tool chip can say "search" and "run" without reusing
+     the status colours, which already mean something else. */
+  --tool-search: #0d7a72;
+  --tool-run:    #6b3fc4;
+
+  /* Small status LABEL text needs the stricter 4.5:1; these are already the
+     measured values, so the pill tokens track the base ones on light. */
+  --pill-live: #0f7a3d;
+  --pill-warn: #a55a00;
+  --pill-off:  #c2273f;
+
+  --danger-fill: #b3213a;
+
+  --radius-applied: 1;
+  --r-sm: 10px;
+  --r:    14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  --toast-bg: #17191f;
+  --toast-fg: #ffffff;
+
+  /* The aurora blobs are gone. A professional light surface is a surface, not
+     a lava lamp; these stay defined so the body rules below still resolve. */
+  --ambient-1: transparent;
+  --ambient-2: transparent;
+  --ambient-3: transparent;
+  /* No grid either. A faint graph-paper overlay behind every screen is texture
+     for its own sake, and at this scale it reads as a dirty display. */
+  --grid-line: transparent;
+  --calendar-filter: none;
+}
+
+[data-theme="dark"] {
+  --bg:        #0b0d12;
+  --bg-sub:    #10131a;
+  --card:      #151922;
+  --card-h:    #1b2029;
+  --b1:        rgba(255,255,255,.07);
+  --b2:        rgba(255,255,255,.12);
+  --b3:        rgba(255,255,255,.22);
+  --txt:       #eceef3;
+  --muted:     #9aa3b5;
+  --dim:       #7b8699;
+  --white:     #ffffff;
+  --black:     #000000;
+
+  --inp-bg:    rgba(255,255,255,.035);
+  --inp-ph:    #7b8699;
+  --modal-bg:  #151922;
+  --overlay:   rgba(5,7,12,.72);
+
+  --glass:        rgba(255,255,255,.045);
+  --glass-strong: rgba(255,255,255,.075);
+  --glass-border: rgba(255,255,255,.09);
+  --shadow:       rgba(0,0,0,.55);
+
+  --accent:        #5b9cf8;
+  --accent-solid:  #2563eb;
+  --accent-weak:   rgba(91,156,248,.14);
+  --accent-ring:   rgba(91,156,248,.45);
+
+  /* Inverted: on a dark surface the "ink pill" is a light pill. */
+  --cta:     #eceef3;
+  --cta-fg:  #14161c;
+  --cta-h:   #ffffff;
+
+  --g1: #5b9cf8;
+  --g2: #5b9cf8;
+  --g3: #5b9cf8;
+  --grad:      var(--accent);
+  --grad-soft: var(--accent-weak);
+
+  --live:    #3ddc84;
+  --offline: #ff6b7a;
+  --static:  #f0b429;
+  --info:    #5b9cf8;
+
+  --tool-search: #3fbfb4;
+  --tool-run:    #a77bf3;
+
+  --pill-live: #3ddc84;
+  --pill-warn: #f0b429;
+  --pill-off:  #ff8a95;
+
+  --danger-fill: #b3213a;
+
+  --radius-applied: 1;
+  --r-sm: 10px;
+  --r:    14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  --toast-bg: #1b2029;
+  --toast-fg: #eceef3;
+
+  --ambient-1: transparent;
+  --ambient-2: transparent;
+  --ambient-3: transparent;
+  --grid-line: transparent;
+  --calendar-filter: invert(.85);
+}
+
+/* ── Base ── */
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color .25s, color .25s;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Ambient aurora background — soft floating gradient blobs + faint grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(60vw 50vh at 12% -8%, var(--ambient-1), transparent 60%),
+    radial-gradient(55vw 45vh at 100% 0%, var(--ambient-2), transparent 55%),
+    radial-gradient(50vw 50vh at 50% 115%, var(--ambient-3), transparent 60%);
+  pointer-events: none;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 46px 46px;
+  pointer-events: none;
+}
+
+::selection { background: var(--accent-weak); color: var(--txt); }
+
+/* ── Typography helpers ── */
+/* Headings are the body face at a heavier weight and tighter tracking, not a
+   second sans. Syne was a display face with personality that fought the dense
+   data it sat above. IBM Plex Sans replaces Outfit: an engineered humanist
+   that stays legible at 11px in a table and reads as tooling rather than
+   marketing, and that sits naturally beside JetBrains Mono in the terminals. */
+.font-display { font-family: 'IBM Plex Sans', system-ui, sans-serif; font-weight: 700; letter-spacing: -.022em; }
+/* The one serif in the system, reserved for the wordmark. A single contrasting
+   voice for the brand mark; everywhere else would be costume. */
+.font-brand   { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; letter-spacing: -.01em; }
+.font-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.tnum         { font-variant-numeric: tabular-nums; }
+/* Was gradient-clipped text. Emphasis comes from weight and size; color says
+   "interactive", and text that isn't interactive shouldn't borrow it. */
+.grad-text { color: var(--accent); }
+
+h1, h2, h3 { text-wrap: balance; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--b3); background-clip: padding-box; }
+
+/* ── Focus ring (accessibility) ── */
+:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   GLASS + SURFACES
+   ════════════════════════════════════════════════════════════════ */
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--glass-border);
+}
+.glass-strong {
+  background: var(--glass-strong);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-border);
+}
+
+/* Generic card */
+.card-v2 {
+  background: var(--card);
+  border: 1px solid var(--b1);
+  border-radius: var(--r);
+  box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 10px 30px -16px var(--shadow);
+}
+
+/* ── Status dots ── */
+@keyframes pulse-dot {
+  0%,100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70%     { box-shadow: 0 0 0 6px transparent; opacity: .7; }
+}
+.live-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--live); color: rgba(34,197,94,.5);
+  box-shadow: 0 0 8px 1px rgba(34,197,94,.55);
+  animation: pulse-dot 1.9s ease-out infinite;
+  flex-shrink: 0;
+}
+.dead-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--offline);
+  box-shadow: 0 0 6px rgba(244,63,94,.4);
+  flex-shrink: 0;
+}
+.static-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--static); color: rgba(245,158,11,.5);
+  box-shadow: 0 0 8px rgba(245,158,11,.5);
+  animation: pulse-dot 2.4s ease-out infinite;
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PROJECT CARD (.p-card kept for compatibility, re-skinned)
+   ════════════════════════════════════════════════════════════════ */
+
+.p-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--b1);
+  border-radius: var(--r);
+  overflow: hidden;
+  transition: transform .22s cubic-bezier(.2,.7,.3,1), border-color .22s, box-shadow .22s, background .22s;
+  box-shadow: 0 10px 30px -18px var(--shadow);
+}
+/* gradient status rail on the left */
+.p-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--b2);
+  transition: opacity .22s;
+}
+.p-card.is-live::before   { background: linear-gradient(to bottom, #34d399, #22c55e); }
+.p-card.is-dead::before   { background: linear-gradient(to bottom, #fb7185, var(--offline)); }
+.p-card.is-static::before { background: linear-gradient(to bottom, #fbbf24, var(--static)); }
+.p-card.is-arch::before   { background: var(--b2); }
+.p-card.is-arch  { opacity: .58; }
+
+.p-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--b2);
+  background: var(--card-h);
+  box-shadow: 0 22px 50px -22px var(--shadow), 0 0 0 1px var(--glass-border);
+}
+.p-card.is-live:hover   { box-shadow: 0 22px 55px -22px rgba(34,197,94,.35), 0 0 0 1px rgba(34,197,94,.25); }
+.p-card.is-static:hover { box-shadow: 0 22px 55px -22px rgba(245,158,11,.3),  0 0 0 1px rgba(245,158,11,.22); }
+
+/* card action row fades in on hover (desktop); always-on mobile below */
+.card-acts { opacity: .55; transition: opacity .18s; }
+.p-card:hover .card-acts { opacity: 1; }
+
+/* ════════════════════════════════════════════════════════════════
+   PILLS / TAGS / CHIPS
+   ════════════════════════════════════════════════════════════════ */
+
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 9px;
+  border: 1px solid var(--b2);
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--glass);
+}
+.tag-chip {
+  display: inline-flex; align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px; color: var(--muted);
+  background: var(--accent-weak);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* status chip (LIVE / OFFLINE / ...) */
+.status-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 3px 9px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.status-chip.live    { color: var(--live);    background: rgba(34,197,94,.12);  border-color: rgba(34,197,94,.3); }
+.status-chip.offline { color: var(--offline); background: rgba(244,63,94,.12);  border-color: rgba(244,63,94,.28); }
+.status-chip.static  { color: var(--static);  background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.28); }
+.status-chip.arch    { color: var(--muted);   background: var(--glass); border-color: var(--b2); }
+
+/* ── Section label ── */
+.sec-label {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 12px; font-weight: 600; letter-spacing: .02em;
+  color: var(--muted);
+  margin: 30px 0 16px;
+}
+.sec-label::after { content: ''; flex: 1; height: 1px; background: var(--b1); }
+.sec-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--dim); font-weight: 500;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   INPUTS
+   ════════════════════════════════════════════════════════════════ */
+
+.inp {
+  width: 100%;
+  background: var(--inp-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r-sm);
+  color: var(--txt);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); background: var(--card); }
+.inp::placeholder { color: var(--inp-ph); }
+.inp option { background: var(--modal-bg); color: var(--txt); }
+input[type="date"].inp::-webkit-calendar-picker-indicator { filter: var(--calendar-filter); }
+.inp-mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+.label {
+  font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  color: var(--muted); text-transform: uppercase;
+  display: block; margin-bottom: 6px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   BUTTONS
+   ════════════════════════════════════════════════════════════════ */
+
+/* The primary action: a solid ink pill (a light pill on dark). One per view.
+   The coloured glow is gone — a shadow that tints the surface under a button
+   is decoration pretending to be depth. */
+.btn-grad {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600;
+  color: var(--cta-fg); border: none; cursor: pointer;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--cta);
+  transition: background .18s cubic-bezier(.22,1,.36,1), transform .15s cubic-bezier(.22,1,.36,1);
+}
+.btn-grad:hover  { background: var(--cta-h); }
+.btn-grad:active { transform: scale(.97); }
+.btn-grad:disabled { cursor: not-allowed; }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500;
+  border: 1px solid var(--b2); color: var(--txt);
+  padding: 10px 16px; cursor: pointer;
+  border-radius: 999px;
+  background: var(--glass);
+  transition: background .15s, color .15s, border-color .15s, transform .15s;
+}
+.btn-ghost:hover  { background: var(--glass-strong); border-color: var(--b3); }
+.btn-ghost:active { transform: scale(.97); }
+
+/* legacy solid → map to gradient look */
+.btn-solid {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600;
+  background: var(--accent-solid); color: #fff; border: none;
+  padding: 9px 16px; cursor: pointer; border-radius: var(--r-sm);
+  transition: transform .15s, filter .2s;
+}
+.btn-solid:hover  { filter: brightness(1.07); }
+.btn-solid:active { transform: scale(.97); }
+
+/* Purposeful colored buttons */
+.btn-green { background: #16a34a; color: #fff; box-shadow: 0 8px 22px -10px rgba(22,163,74,.6); }
+.btn-blue  { background: #2563eb; color: #fff; box-shadow: 0 8px 22px -10px rgba(37,99,235,.6); }
+.btn-red   { background: #e11d48; color: #fff; box-shadow: 0 8px 22px -10px rgba(225,29,72,.6); }
+.btn-amber { background: #d97706; color: #fff; box-shadow: 0 8px 22px -10px rgba(217,119,6,.6); }
+.btn-green:hover, .btn-blue:hover, .btn-red:hover, .btn-amber:hover { filter: brightness(1.08); opacity: 1; }
+
+/* Icon button — rounded, clear hover */
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: var(--glass);
+  border: 1px solid var(--b1);
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: background .15s, color .15s, border-color .15s, transform .12s;
+}
+.btn-icon:hover  { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-ring); }
+.btn-icon:active { transform: scale(.92); }
+.btn-icon:disabled, .btn-icon[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.btn-icon.danger:hover { background: rgba(244,63,94,.14); color: var(--offline); border-color: rgba(244,63,94,.4); }
+
+/* ════════════════════════════════════════════════════════════════
+   SIDEBAR / NAV
+   ════════════════════════════════════════════════════════════════ */
+
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 13.5px; font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: background .15s, color .15s;
+  width: 100%;
+  border: 1px solid transparent;
+}
+.nav-item:hover { background: var(--glass); color: var(--txt); }
+
+/* The sidebar identity block doubles as the profile link, so it needs the same
+   affordance as a nav item — otherwise it reads as static text and nobody
+   discovers it is clickable. Focus ring comes from the global :focus-visible. */
+.user-link { transition: background .15s; }
+.user-link:hover { background: var(--glass); }
+.user-link[aria-current="page"] { background: var(--accent-weak); }
+.nav-item.active {
+  color: var(--txt);
+  background: var(--grad-soft);
+  border-color: var(--glass-border);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: -1px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--grad);
+}
+.nav-badge {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-weak); color: var(--accent);
+}
+
+/* ── Filter / segmented tabs ── */
+.ftab {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--muted);
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer; background: transparent;
+  transition: all .15s;
+}
+.ftab:hover { color: var(--txt); background: var(--glass); }
+.ftab.on {
+  color: var(--txt); font-weight: 600;
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MODAL / OVERLAY
+   ════════════════════════════════════════════════════════════════ */
+
+.overlay {
+  position: fixed; inset: 0;
+  background: var(--overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-box {
+  background: var(--modal-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r-lg);
+  width: 100%; max-width: 620px;
+  max-height: 92vh; overflow-y: auto;
+  box-shadow: 0 40px 90px -30px rgba(0,0,0,.7);
+  animation: mUp .26s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes mUp { from { opacity: 0; transform: translateY(20px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* ════════════════════════════════════════════════════════════════
+   TOAST
+   ════════════════════════════════════════════════════════════════ */
+
+.toast-el {
+  position: fixed; bottom: 24px; right: 24px; z-index: 90;
+  background: var(--toast-bg); color: var(--toast-fg);
+  font-size: 13px; font-weight: 500;
+  padding: 13px 18px;
+  border-radius: var(--r);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 50px -16px rgba(0,0,0,.6);
+  transform: translateY(90px); opacity: 0;
+  transition: transform .3s cubic-bezier(.2,.7,.3,1), opacity .3s;
+  pointer-events: none;
+}
+.toast-el.show { transform: translateY(0); opacity: 1; }
+@media (max-width: 640px) {
+  .toast-el { left: 16px; right: 16px; bottom: 16px; text-align: center; }
+}
+
+/* ── Scan progress ── */
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(420%); } }
+.scan-track { height: 3px; background: var(--b1); border-radius: 99px; overflow: hidden; width: 160px; }
+.scan-fill  { height: 100%; width: 28%; border-radius: 99px; background: var(--grad); animation: sweep 1.3s ease-in-out infinite; }
+
+/* ── Port scan result row ── */
+.port-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: var(--inp-bg);
+  border: 1px solid var(--b1); border-radius: var(--r-sm); margin-bottom: 5px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   EMPTY / LOADING STATES
+   ════════════════════════════════════════════════════════════════ */
+
+.empty-state {
+  border: 1px dashed var(--b2);
+  border-radius: var(--r-lg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 300px; color: var(--muted);
+  background: var(--glass);
+  text-align: center; padding: 40px 24px;
+}
+
+@keyframes shimmer { 0% { background-position: -460px 0; } 100% { background-position: 460px 0; } }
+.skeleton {
+  border-radius: var(--r);
+  background: linear-gradient(90deg, var(--card) 25%, var(--card-h) 50%, var(--card) 75%);
+  background-size: 920px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ── Spin ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin .7s linear infinite; }
+
+/* ── Stagger / card-in ── */
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.stat-val { animation: fadeUp .4s ease both; }
+
+/* ── URL overflow ── */
+.url-clip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Kbd hint ── */
+.kbd {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--b2); padding: 2px 6px;
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  color: var(--dim); border-radius: 6px; background: var(--glass);
+}
+@media (max-width: 768px) { .kbd { display: none; } }
+
+/* ── Theme toggle / round icon control ── */
+.theme-toggle {
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  background: var(--glass); border: 1px solid var(--b1); color: var(--muted);
+  width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; border-radius: var(--r-sm);
+  transition: background .15s, color .15s, border-color .15s, transform .12s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover  { background: var(--accent-weak); color: var(--accent); border-color: var(--accent-ring); }
+.theme-toggle:active { transform: scale(.92); }
+
+/* ── Drawer animations ── */
+@keyframes drawerSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes notifSlideIn  { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes sideSlideIn   { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+.drawer-resize-handle:hover .drawer-resize-line,
+.drawer-resize-handle:active .drawer-resize-line {
+  opacity: 1 !important;
+  background: var(--accent) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  body { font-size: 14px; }
+  .card-acts { opacity: 1; }
+  .btn-icon { width: 42px; height: 42px; }
+  .btn-ghost, .btn-solid, .btn-grad { min-height: 46px; padding-left: 20px; padding-right: 20px; }
+  .ftab { padding: 9px 13px; }
+}
+
+@media (max-width: 640px) {
+  .url-clip { max-width: 150px; }
+  .modal-box { max-height: 100dvh; border-radius: var(--r-lg) var(--r-lg) 0 0; align-self: flex-end; }
+  .overlay { padding: 0; align-items: flex-end; }
+  .modal-box .grid-cols-3 { grid-template-columns: 1fr !important; }
+  .modal-box .col-span-2 { grid-column: span 1 !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* The mobile drawer is the primary navigation on a phone, so its rows are
+   sized for a thumb rather than a cursor: the desktop rail's 13.5px/10px rows
+   are a mis-tap waiting to happen at arm's length. Scoped to the drawer so the
+   desktop sidebar keeps its density. */
+.devdash-drawer .nav-item {
+  padding: 14px 14px;
+  font-size: 16px;
+  gap: 14px;
+  border-radius: var(--r);
+}
+.devdash-drawer .nav-item svg { width: 20px; height: 20px; }
+.devdash-drawer .btn-grad { min-height: 50px; font-size: 15px; }
+
+/* ════════════════════════════════════════════════════════════════
+   MARKETING SITE
+   ════════════════════════════════════════════════════════════════
+
+   Everything here is prefixed `mk-` and every selector is a single
+   class. The app's own component classes (.btn, .card, .chip) are
+   reused by the dashboard at a dozen specificities, and a bare
+   element or `.section p` selector here would reach into them from
+   a shared stylesheet. Prefix + flat specificity keeps the two
+   surfaces from cancelling each other out.
+
+   Colour comes from the same tokens the product uses, so the site
+   and the app are the same object in two contexts. No new palette,
+   and no gradients. */
+
+.mk-page { background: var(--bg); color: var(--txt); }
+
+.mk-wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.mk-wrap-narrow { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+.mk-section { padding: 96px 0; }
+.mk-section-tight { padding: 64px 0; }
+.mk-rule { border: 0; border-top: 1px solid var(--b1); margin: 0; }
+
+/* ── Type scale ──────────────────────────────────────────────── */
+.mk-h1 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 700; letter-spacing: -.033em; line-height: 1.03;
+  font-size: clamp(38px, 6.2vw, 68px);
+  text-wrap: balance;
+}
+.mk-h2 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 700; letter-spacing: -.028em; line-height: 1.1;
+  font-size: clamp(27px, 3.4vw, 40px);
+  text-wrap: balance;
+}
+.mk-h3 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 600; letter-spacing: -.018em; line-height: 1.25;
+  font-size: 19px;
+}
+.mk-lede { font-size: clamp(16px, 1.7vw, 19px); line-height: 1.6; color: var(--muted); text-wrap: pretty; }
+.mk-body { font-size: 15.5px; line-height: 1.65; color: var(--muted); text-wrap: pretty; }
+.mk-small { font-size: 13.5px; line-height: 1.6; color: var(--dim); }
+
+/* The eyebrow is a section address, not decoration — it names which
+   part of the product the reader is looking at. Mono, because in this
+   product mono means "a literal you will actually see or type". */
+.mk-eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--dim);
+  display: block; margin-bottom: 14px;
+}
+
+/* Ports, session names, machine names, commands. Always mono, in the
+   product and here — it tells the reader "this is a literal string". */
+.mk-lit {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: .92em;
+  background: var(--glass); border: 1px solid var(--b1);
+  border-radius: 6px; padding: .1em .38em;
+  color: var(--txt); white-space: nowrap;
+}
+
+.mk-link { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+.mk-link:hover { border-bottom-color: currentColor; }
+
+/* ── Buttons. The primary CTA is ink, never the accent blue: a black
+      pill reads as "the action" and leaves blue free to mean "link". ── */
+.mk-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+  background: var(--cta); color: var(--cta-fg);
+  border: 1px solid var(--cta); border-radius: 999px;
+  padding: 12px 22px; text-decoration: none; cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+.mk-cta:hover { background: var(--cta-h); border-color: var(--cta-h); }
+.mk-cta:active { transform: translateY(1px); }
+
+.mk-cta-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+  background: transparent; color: var(--txt);
+  border: 1px solid var(--b2); border-radius: 999px;
+  padding: 12px 22px; text-decoration: none; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.mk-cta-ghost:hover { border-color: var(--b3); background: var(--glass); }
+
+.mk-cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+/* ── Cards and grids ─────────────────────────────────────────── */
+.mk-card {
+  background: var(--card); border: 1px solid var(--b1);
+  border-radius: var(--r); padding: 24px;
+}
+.mk-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20px; }
+.mk-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
+.mk-grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; }
+
+/* ── The dark panel. #0c0e13 is the terminal ground — the colour of
+      the thing the product actually shows you — so it anchors the
+      hero, the problem block and the install block. ─────────────── */
+.mk-dark {
+  background: #0c0e13; color: #d6dae3;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: var(--r); overflow: hidden;
+}
+.mk-dark-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  color: rgba(214,218,227,.55);
+}
+.mk-term {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px; line-height: 1.85; padding: 18px 16px;
+  overflow-x: auto; white-space: pre;
+}
+.mk-term-dim { color: rgba(214,218,227,.45); }
+.mk-term-cmd { color: #d6dae3; }
+.mk-term-live { color: #3ddc84; }
+.mk-term-off  { color: #ff6b7a; }
+.mk-term-warn { color: #f0b429; }
+
+/* ── Fleet panel: the hero's signature. Machines listed the way the
+      dashboard lists them, with the connection arrow pointing OUT of
+      the machine. The direction of that arrow is the whole product
+      thesis, so it is rendered as content, not as an illustration. ── */
+.mk-fleet-row {
+  display: grid; grid-template-columns: 14px 1fr auto auto;
+  align-items: center; gap: 12px;
+  padding: 10px 16px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  border-top: 1px solid rgba(255,255,255,.055);
+}
+.mk-fleet-row:first-child { border-top: 0; }
+.mk-dot { width: 8px; height: 8px; border-radius: 999px; background: #ff6b7a; transition: background .45s ease; }
+.mk-dot-live { background: #3ddc84; }
+.mk-fleet-name { color: #d6dae3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-fleet-out { color: rgba(214,218,227,.5); white-space: nowrap; }
+.mk-fleet-port { color: #5b9cf8; white-space: nowrap; }
+
+/* Boot sequence: one orchestrated page-load moment, not scattered
+   effects. Rows arrive in order, then the dots turn live. */
+.mk-boot { opacity: 0; animation: mk-boot-in .5s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes mk-boot-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mk-boot { animation: none; opacity: 1; }
+  .mk-dot { transition: none; }
+}
+
+/* ── Nav ─────────────────────────────────────────────────────── */
+.mk-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--b1);
+}
+.mk-nav-inner { display: flex; align-items: center; gap: 20px; height: 60px; }
+.mk-nav-links { display: flex; align-items: center; gap: 4px; margin-left: 12px; }
+.mk-nav-link {
+  font-size: 14px; font-weight: 500; color: var(--muted);
+  text-decoration: none; padding: 7px 11px; border-radius: 8px;
+  transition: color .15s ease, background .15s ease; white-space: nowrap;
+}
+.mk-nav-link:hover { color: var(--txt); background: var(--glass); }
+.mk-nav-link-on { color: var(--txt); background: var(--glass); }
+.mk-nav-spacer { flex: 1; }
+.mk-nav-toggle { display: none; }
+
+.mk-menu {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--card); border-bottom: 1px solid var(--b1);
+  padding: 12px 24px 20px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.mk-foot { border-top: 1px solid var(--b1); padding: 56px 0 40px; }
+.mk-foot-grid { display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 32px; }
+.mk-foot-head {
+  font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--dim); margin-bottom: 12px;
+}
+.mk-foot-link {
+  display: block; font-size: 14px; color: var(--muted);
+  text-decoration: none; padding: 5px 0;
+}
+.mk-foot-link:hover { color: var(--txt); }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .mk-grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .mk-grid-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .mk-foot-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+}
+@media (max-width: 720px) {
+  .mk-section { padding: 64px 0; }
+  .mk-section-tight { padding: 44px 0; }
+  .mk-grid-2, .mk-grid-3, .mk-grid-4 { grid-template-columns: minmax(0,1fr); }
+  .mk-nav-links { display: none; }
+  .mk-nav-toggle { display: inline-flex; }
+  .mk-fleet-row { grid-template-columns: 14px 1fr auto; font-size: 12px; }
+  .mk-fleet-out { display: none; }
+}
+
+/* Keyboard focus stays visible everywhere on the marketing site. */
+.mk-cta:focus-visible, .mk-cta-ghost:focus-visible, .mk-nav-link:focus-visible,
+.mk-foot-link:focus-visible, .mk-link:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px;
+}
+
+/* On a phone the toggle owns the secondary links; showing GitHub and Log in
+   next to the CTA as well leaves no room for the wordmark. */
+@media (max-width: 720px) {
+  .mk-nav-aux { display: none !important; }
+}
+
+/* Two-column marketing rows collapse to one on tablet and below. */
+@media (max-width: 900px) {
+  .mk-hero-grid { grid-template-columns: minmax(0,1fr) !important; gap: 36px !important; }
+  .mk-diff-row { grid-template-columns: 34px minmax(0,1fr) !important; gap: 16px !important; }
+  .mk-diff-row > p { grid-column: 2; }
+}

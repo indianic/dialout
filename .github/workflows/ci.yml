@@ -1,0 +1,43 @@
+name: CI
+
+# Typecheck, test and build on every pull request and every push to main.
+# The agent has its own runner (node:test) that the root `npm test` does not
+# cover, so it gets its own job rather than being appended to the web one —
+# a failure there should be readable without scrolling past a Next.js build.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+        env:
+          # The build does not connect, but the module that reads this is
+          # imported at build time and throws on an empty value.
+          DATABASE_URL: postgres://localhost:5432/dialout
+          JWT_SECRET: ci-build-only-not-a-real-secret
+
+  agent:
+    name: Agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        working-directory: packages/devdash-agent

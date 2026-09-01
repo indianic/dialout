@@ -1,0 +1,1149 @@
+/* Mobile terminal UI (spec §12) — shell, composer, key chips.
+   Uses the design tokens from globals.css. */
+
+/* --- KeyChipBar --- */
+.devdash-kcb {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px 10px;
+  background: var(--bg-sub);
+  border-top: 1px solid var(--b1);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.devdash-kcb::-webkit-scrollbar { display: none; }
+
+.devdash-kcb-chip {
+  flex: none;
+  min-width: 40px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--glass);
+  border: 1px solid var(--b1);
+  color: var(--txt);
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.devdash-kcb-chip:active { background: var(--glass-strong); }
+.devdash-kcb-chip.armed {
+  background: var(--accent-weak);
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+.devdash-kcb-chip.locked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+/* --- TerminalComposer --- */
+.devdash-composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg-sub);
+  border-top: 1px solid var(--b1);
+}
+.devdash-composer-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  background: var(--inp-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  /* 16px minimum: below that iOS Safari auto-zooms the page on focus */
+  font-size: 16px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  max-height: 120px;
+  outline: none;
+}
+.devdash-composer-input::placeholder { color: var(--inp-ph); }
+.devdash-composer-input:focus { border-color: var(--accent-ring); }
+.devdash-composer-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.devdash-composer-send:active { opacity: 0.85; }
+.devdash-composer-hide {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* --- MobileTerminalShell --- */
+.devdash-mts {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999; /* same layer as .devdash-fullscreen-overlay it replaces */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overscroll-behavior: none;
+}
+
+.devdash-mts-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: env(safe-area-inset-top) 6px 0 calc(6px + env(safe-area-inset-left));
+  height: calc(48px + env(safe-area-inset-top));
+  background: var(--bg-sub);
+  border-bottom: 1px solid var(--b1);
+}
+
+/* Unnamed wrapper (pill + tabs button) — no class hook in the shell markup;
+   targeted structurally so it can shrink/truncate correctly. */
+.devdash-mts-topbar > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.devdash-mts-tabsbtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--txt);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.devdash-mts-title {
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45vw;
+}
+.devdash-mts-count {
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+.devdash-mts-caret { color: var(--dim); font-size: 10px; }
+
+.devdash-mts-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.devdash-mts-dot.live { background: var(--live); box-shadow: 0 0 6px var(--live); }
+.devdash-mts-dot.dead { background: var(--offline); }
+
+.devdash-mts-actions { display: flex; align-items: center; gap: 2px; }
+.devdash-mts-iconbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-size: 13px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  cursor: pointer;
+  padding: 0 8px;
+}
+.devdash-mts-iconbtn:active { background: var(--glass); }
+.devdash-mts-iconbtn.on { color: var(--accent); background: var(--accent-weak); }
+
+.devdash-mts-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--overlay);
+}
+.devdash-mts-menu {
+  position: absolute;
+  top: calc(42px + env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
+  z-index: 10001;
+  background: var(--modal-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r);
+  overflow: hidden;
+  box-shadow: 0 12px 40px var(--shadow);
+}
+.devdash-mts-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--b1);
+  color: var(--txt);
+  cursor: pointer;
+}
+.devdash-mts-menu-item:last-child { border-bottom: none; }
+.devdash-mts-menu-item.active { background: var(--accent-weak); }
+.devdash-mts-menu-item.new { color: var(--accent); justify-content: center; font-size: 13px; }
+.devdash-mts-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  font-size: 13px;
+}
+.devdash-mts-menu-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 18px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.devdash-mts-term {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: pan-y; /* our JS handles pinch; browser keeps vertical scroll */
+}
+.devdash-mts-pane {
+  position: absolute;
+  inset: 0;
+  padding: 2px 4px 0 calc(4px + env(safe-area-inset-left));
+}
+
+.devdash-mts-reconnect {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  border: 1px solid var(--b2);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Session-ended banner — same pill styling as the reconnect banner, but
+   interactive (holds the Restart affordance), so it opts back into pointer
+   events and centers its label + button. */
+.devdash-mts-exited {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  border: 1px solid var(--b2);
+  border-radius: 999px;
+  padding: 4px 6px 4px 14px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  z-index: 6;
+}
+.devdash-mts-exited-label { opacity: 0.8; }
+.devdash-mts-restart {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--b2);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  color: var(--toast-fg);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.devdash-mts-restart:active { background: var(--b2); }
+
+/* Follow-tail "Jump to latest" pill — shown only while scrolled up
+   (pause-follow); floats bottom-right, above the composer/key-chip row. */
+.devdash-mts-jumpbottom {
+  position: absolute;
+  right: calc(14px + env(safe-area-inset-right));
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  border: 1px solid var(--b2);
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  cursor: pointer;
+  box-shadow: 0 6px 20px var(--shadow);
+}
+.devdash-mts-jumpbottom:active { background: var(--glass-strong); }
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-mts-jumpbottom { animation: devdash-mts-jump-in 0.18s ease-out; }
+}
+@keyframes devdash-mts-jump-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.devdash-mts-launcher {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.devdash-mts-launcher-title {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.devdash-mts-launchbtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--b1);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.devdash-mts-launchbtn:active { background: var(--card-h); }
+.devdash-mts-launchicon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  background: var(--accent-weak);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  flex: none;
+}
+.devdash-mts-launchcmd {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+}
+
+/* --- Peek (read-only) banner --- */
+.devdash-mts-peekbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg-sub);
+  border-top: 1px solid var(--b1);
+  color: var(--muted);
+  font-size: 13px;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  cursor: pointer;
+  width: 100%;
+}
+.devdash-mts-peekbar:active { background: var(--glass); }
+.devdash-mts-peekdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--static);
+  flex: none;
+}
+
+/* Peek panes render the session's true grid and pan horizontally. */
+.devdash-mts-pane.peek { overflow: auto; -webkit-overflow-scrolling: touch; }
+
+/* Fullscreen-unsupported hint banner (shown briefly when the user taps the
+   fullscreen icon on a browser without the Fullscreen API, e.g. iOS Safari). */
+.devdash-mts-fshint {
+  flex: none;
+  padding: 8px 14px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--b1);
+}
+
+/* Copy menu — reuses the .devdash-mts-menu popover look but anchored to the
+   copy icon on the right rather than stretched full-width like the tabs menu. */
+.devdash-mts-copymenu {
+  position: absolute;
+  top: calc(46px + env(safe-area-inset-top));
+  right: 8px;
+  z-index: 10001;
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  background: var(--modal-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r);
+  overflow: hidden;
+  box-shadow: 0 12px 40px var(--shadow);
+}
+.devdash-mts-copymenu-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--b1);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  text-align: left;
+  cursor: pointer;
+}
+.devdash-mts-copymenu-item:last-child { border-bottom: none; }
+.devdash-mts-copymenu-item:active { background: var(--glass); }
+
+/* --- Close-confirm sheet (Task 8) — shown before closing a live session,
+   from either the topbar X or a tab's per-tab X in the tabs menu. Sits
+   above the tabs/copy menus (10001) and the settings drawer (10050) since
+   either can be the trigger. Reuses the settings-drawer's bottom-sheet
+   look (rounded top, handle, slide-up) but sized for its two-button
+   content instead of a scrollable body. */
+.devdash-mts-confirm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+}
+.devdash-mts-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay);
+}
+.devdash-mts-confirm-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--modal-bg);
+  border: 1px solid var(--b2);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  padding: 4px 16px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px var(--shadow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-mts-confirm-sheet {
+    animation: devdash-tsd-slideup 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+.devdash-mts-confirm-handle {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+.devdash-mts-confirm-handle::before {
+  content: '';
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--b3);
+}
+.devdash-mts-confirm-title {
+  margin: 12px 0 16px;
+  color: var(--txt);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+.devdash-mts-confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.devdash-mts-confirm-btn {
+  flex: 1;
+  min-height: 46px;
+  border-radius: var(--r);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.devdash-mts-confirm-btn.cancel {
+  background: var(--glass);
+  border: 1px solid var(--b2);
+  color: var(--txt);
+}
+.devdash-mts-confirm-btn.cancel:active { background: var(--glass-strong); }
+.devdash-mts-confirm-btn.danger {
+  /* Dedicated darker fill (not --offline) so white 14px/600 text clears
+     4.5:1 — see globals.css --danger-fill comment. */
+  background: var(--danger-fill);
+  border: 1px solid var(--danger-fill);
+  color: var(--white);
+}
+.devdash-mts-confirm-btn.danger:active { opacity: 0.85; }
+
+/* --- TerminalSearchBar (in-buffer search) --- */
+.devdash-tsb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px calc(6px + env(safe-area-inset-right)) 4px calc(6px + env(safe-area-inset-left));
+  background: var(--bg-sub);
+  border-bottom: 1px solid var(--b1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-tsb { animation: devdash-tsb-slidedown 0.16s ease-out; }
+}
+@keyframes devdash-tsb-slidedown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.devdash-tsb-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  background: var(--inp-bg);
+  border: 1px solid var(--b2);
+  border-radius: var(--r-sm);
+  color: var(--txt);
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  /* 16px minimum: below that iOS Safari auto-zooms the page on focus */
+  font-size: 16px;
+  padding: 0 12px;
+  outline: none;
+}
+.devdash-tsb-input::placeholder { color: var(--inp-ph); }
+.devdash-tsb-input:focus { border-color: var(--accent-ring); }
+.devdash-tsb-count {
+  flex: none;
+  min-width: 56px;
+  text-align: center;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.devdash-tsb-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.devdash-tsb-btn:active { background: var(--glass); }
+.devdash-tsb-btn:disabled { opacity: 0.4; cursor: default; }
+.devdash-tsb-close { color: var(--txt); }
+
+/* --- ConnectionPill --- */
+.devdash-connpill {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 0;
+  max-width: 46vw;
+  padding: 0 10px 0 8px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.devdash-connpill.connected,
+.devdash-connpill.exited {
+  cursor: default;
+}
+.devdash-connpill:active { background: var(--glass); }
+
+.devdash-connpill-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.devdash-connpill-label {
+  flex: none;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.devdash-connpill-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--txt);
+}
+
+/* live / connected — green */
+.devdash-connpill.connected .devdash-connpill-dot {
+  background: var(--live);
+  box-shadow: 0 0 6px var(--live);
+}
+/* Label uses --pill-live (not --live) — see globals.css comment: needs a
+   stricter 4.5:1 text ratio than the dot's 3:1 non-text minimum. */
+.devdash-connpill.connected .devdash-connpill-label { color: var(--pill-live); }
+
+/* connecting / reconnecting — amber, pulsing */
+.devdash-connpill.connecting .devdash-connpill-dot,
+.devdash-connpill.reconnecting .devdash-connpill-dot {
+  background: var(--static);
+  box-shadow: 0 0 6px var(--static);
+}
+.devdash-connpill.connecting .devdash-connpill-label,
+.devdash-connpill.reconnecting .devdash-connpill-label {
+  color: var(--pill-warn);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-connpill.connecting .devdash-connpill-dot,
+  .devdash-connpill.reconnecting .devdash-connpill-dot {
+    animation: devdash-connpill-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes devdash-connpill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* disconnected — red */
+.devdash-connpill.disconnected .devdash-connpill-dot { background: var(--offline); }
+.devdash-connpill.disconnected .devdash-connpill-label { color: var(--pill-off); }
+
+/* exited — grey, non-interactive. Label reuses --muted (passes 4.5:1 in
+   both themes against --bg-sub); the dot stays --dim since it's non-text. */
+.devdash-connpill.exited .devdash-connpill-dot { background: var(--dim); }
+.devdash-connpill.exited .devdash-connpill-label { color: var(--muted); }
+
+/* --- TerminalSettingsDrawer --- */
+.devdash-tsd-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10050; /* above .devdash-mts-menu (10001) and the shell (9999) */
+}
+.devdash-tsd-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay);
+}
+.devdash-tsd-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 85dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--modal-bg);
+  border: 1px solid var(--b2);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -12px 40px var(--shadow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-tsd-sheet {
+    animation: devdash-tsd-slideup 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+@keyframes devdash-tsd-slideup {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* --- Desktop 'panel' variant (Task 10): same drawer sections, restyled as a
+   top-right popover instead of a full-width bottom sheet. Anchored, fixed
+   width, its own scroll; the grab handle is hidden. Focus-trap, Escape and
+   aria come from the shared component unchanged. --- */
+.devdash-tsd-root.panel {
+  z-index: 10060; /* above the terminal panel's fullscreen overlay (9999) */
+}
+.devdash-tsd-root.panel .devdash-tsd-backdrop {
+  background: transparent;
+}
+.devdash-tsd-root.panel .devdash-tsd-handle {
+  display: none;
+}
+.devdash-tsd-root.panel .devdash-tsd-sheet {
+  left: auto;
+  right: 12px;
+  bottom: auto;
+  top: 52px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: min(80vh, 620px);
+  border: 1px solid var(--b2);
+  border-radius: 14px;
+  padding-bottom: 0;
+  box-shadow: 0 18px 50px var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.devdash-tsd-root.panel .devdash-tsd-head {
+  top: 0;
+}
+.devdash-tsd-root.panel .devdash-tsd-body {
+  padding-bottom: 20px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .devdash-tsd-root.panel .devdash-tsd-sheet {
+    animation: devdash-tsd-panel-in 0.14s ease;
+  }
+}
+@keyframes devdash-tsd-panel-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.devdash-tsd-handle {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+  background: var(--modal-bg);
+}
+.devdash-tsd-handle::before {
+  content: '';
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--b3);
+}
+
+.devdash-tsd-head {
+  position: sticky;
+  top: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 16px 12px;
+  background: var(--modal-bg);
+  border-bottom: 1px solid var(--b1);
+  color: var(--txt);
+  font-size: 15px;
+  font-weight: 600;
+}
+.devdash-tsd-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 44px;
+  height: 44px;
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.devdash-tsd-x:active { background: var(--glass); color: var(--txt); }
+
+.devdash-tsd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 10px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.devdash-tsd-section { display: flex; flex-direction: column; gap: 10px; }
+.devdash-tsd-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Font size row */
+.devdash-tsd-font-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.devdash-tsd-font-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  background: var(--glass);
+  border: 1px solid var(--b1);
+  color: var(--txt);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.devdash-tsd-font-btn:active { background: var(--glass-strong); }
+.devdash-tsd-font-btn:disabled { opacity: 0.4; cursor: default; }
+.devdash-tsd-font-slider {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.devdash-tsd-font-value {
+  flex: none;
+  min-width: 40px;
+  text-align: center;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.devdash-tsd-font-reset {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  background: none;
+  border: 1px solid var(--b1);
+  color: var(--muted);
+  cursor: pointer;
+}
+.devdash-tsd-font-reset:active { background: var(--glass); color: var(--txt); }
+
+/* Font family list (Task 6) — same button+active-border+checkmark idiom as
+   the theme grid below, but a single-column list since there are no
+   swatches to lay out in a grid, and each button previews its own font via
+   inline style. */
+.devdash-tsd-fontfamily-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.devdash-tsd-fontfamily-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 2px solid var(--b1);
+  border-radius: var(--r-sm);
+  background: var(--glass);
+  color: var(--txt);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.devdash-tsd-fontfamily-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.devdash-tsd-fontfamily-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.devdash-tsd-fontfamily-check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--white);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Theme grid */
+.devdash-tsd-theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.devdash-tsd-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 64px;
+  padding: 10px;
+  border: 2px solid var(--b1);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.devdash-tsd-theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.devdash-tsd-theme-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.devdash-tsd-theme-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', Menlo, Monaco, monospace;
+  /* color is set inline per-theme via themeLabelColor(t.background) in
+     TerminalSettingsDrawer.tsx — a near-black/near-white chosen from the
+     card's own background luminance (WCAG relative-luminance formula),
+     NOT the theme's `foreground`. `foreground` was tried first but fails
+     AA against its own `background` for some curated palettes (e.g.
+     Solarized Light: #657b83 on #fdf6e3 is only ~4.1:1). A fixed overlay
+     strip was deliberately NOT added here: darkening/lightening the card
+     would shift contrast between the card's own bg/fg pair and can
+     *reduce* it for mid-tone light themes (verified against WCAG contrast
+     math for e.g. solarized-light, where a semi-opaque black scrim drops
+     the ratio from ~9:1 to under 3:1). */
+}
+/* Theme-independent checkmark badge — accent bg + white icon always reads
+   regardless of which theme's background/foreground the card is using. */
+.devdash-tsd-theme-check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--white);
+  font-size: 10px;
+  line-height: 1;
+}
+.devdash-tsd-theme-swatches { display: flex; gap: 4px; }
+.devdash-tsd-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* Keyboard-key toggle rows + Screen toggle rows share the same row/switch
+   look; both wrap a checkbox[role=switch] in a <label>, so the whole
+   44px-tall row is the tap target, not just the switch control. */
+.devdash-tsd-key-list,
+.devdash-tsd-toggle-list {
+  display: flex;
+  flex-direction: column;
+}
+.devdash-tsd-key-row,
+.devdash-tsd-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.devdash-tsd-key-row:not(:last-child),
+.devdash-tsd-toggle-row:not(:last-child) {
+  border-bottom: 1px solid var(--b1);
+}
+.devdash-tsd-key-label,
+.devdash-tsd-toggle-label {
+  font-size: 13px;
+  color: var(--txt);
+}
+.devdash-tsd-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.devdash-tsd-toggle-note {
+  font-size: 11px;
+  /* --dim failed 4.5:1 against --modal-bg in both themes; --muted passes. */
+  color: var(--muted);
+}
+
+.devdash-tsd-key-row input[type='checkbox'],
+.devdash-tsd-toggle-row input[type='checkbox'] {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 42px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--b2);
+  border: 1px solid var(--b2);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.devdash-tsd-key-row input[type='checkbox']::before,
+.devdash-tsd-toggle-row input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 3px var(--shadow);
+  transition: transform 0.15s ease;
+}
+.devdash-tsd-key-row input[type='checkbox']:checked,
+.devdash-tsd-toggle-row input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.devdash-tsd-key-row input[type='checkbox']:checked::before,
+.devdash-tsd-toggle-row input[type='checkbox']:checked::before {
+  transform: translateX(16px);
+}
+.devdash-tsd-key-row input[type='checkbox']:disabled,
+.devdash-tsd-toggle-row input[type='checkbox']:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* --- Landscape: compact chrome, maximize the terminal viewport --- */
+@media (orientation: landscape) {
+  .devdash-mts-topbar {
+    height: calc(38px + env(safe-area-inset-top));
+  }
+  .devdash-mts-iconbtn {
+    min-width: 36px;
+    height: 34px;
+  }
+  .devdash-mts-actions {
+    /* Landscape icon buttons shrink (36x34) by design; widen the gap so
+       adjacent smaller targets are less likely to be mis-tapped. */
+    gap: 5px;
+  }
+  .devdash-mts-tabsbtn,
+  .devdash-connpill {
+    min-height: 34px;
+  }
+  .devdash-mts-fshint { padding: 4px 12px; font-size: 11px; }
+
+  .devdash-kcb { padding: 4px 8px; gap: 4px; }
+  .devdash-kcb-chip { height: 28px; min-width: 34px; padding: 0 9px; }
+
+  .devdash-composer { padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); gap: 6px; }
+  .devdash-composer-input { padding: 5px 10px; max-height: 64px; }
+  .devdash-composer-send { width: 34px; height: 34px; }
+  .devdash-composer-hide { height: 34px; }
+
+  .devdash-mts-peekbar { padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+
+  .devdash-mts-jumpbottom { min-height: 34px; bottom: 8px; font-size: 11px; }
+
+  .devdash-tsd-sheet { max-height: 92dvh; }
+
+  .devdash-tsb { padding: 3px 6px; }
+  .devdash-tsb-input { min-height: 34px; }
+  .devdash-tsb-btn { min-width: 34px; min-height: 34px; }
+}
+
+/* --- Focus-visible outlines on new interactive elements ---
+   (globals.css already sets a universal :focus-visible ring; these are
+   explicit per-element so offsets read correctly on small round/pill
+   controls and nothing gets clipped by an ancestor's overflow:hidden.) */
+.devdash-connpill:focus-visible,
+.devdash-mts-iconbtn:focus-visible,
+.devdash-mts-tabsbtn:focus-visible,
+.devdash-mts-jumpbottom:focus-visible,
+.devdash-mts-copymenu-item:focus-visible,
+.devdash-mts-launchbtn:focus-visible,
+.devdash-tsd-x:focus-visible,
+.devdash-tsd-font-btn:focus-visible,
+.devdash-tsd-font-reset:focus-visible,
+.devdash-tsd-font-slider:focus-visible,
+.devdash-tsd-key-row input:focus-visible,
+.devdash-tsd-toggle-row input:focus-visible,
+.devdash-tsb-input:focus-visible,
+.devdash-tsb-btn:focus-visible,
+.devdash-mts-confirm-btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+.devdash-tsd-theme-card:focus-visible,
+.devdash-tsd-fontfamily-item:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 3px;
+}

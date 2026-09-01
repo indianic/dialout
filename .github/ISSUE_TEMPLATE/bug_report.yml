@@ -1,0 +1,73 @@
+name: Bug report
+description: Something behaves differently from what the docs or the code say it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dialout is self-hosted, so we cannot look at your instance. The more of
+        the environment section you fill in, the less back-and-forth this takes.
+
+        **Do not paste secrets.** API keys (`mch_…`), JWTs, `.env` contents and
+        session cookies are not needed to reproduce anything.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component
+      multiple: true
+      options:
+        - Web app (Next.js, port 50051)
+        - WebSocket server (port 50052)
+        - Agent (devdash-agent CLI)
+        - Mobile app (iOS / Android)
+        - Terminals / tmux
+        - AI sessions
+        - HTTP tunnel
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Server OS:
+        - Node version (`node -v`):
+        - PostgreSQL version:
+        - Agent version (`devdash-agent status`):
+        - Agent machine OS:
+        - Browser (if relevant):
+        - Reverse proxy (if relevant):
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        `pm2 logs` for the app and ws-server, and `devdash-agent status` output.
+        Redact hostnames and keys.
+      render: shell

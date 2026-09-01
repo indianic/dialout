@@ -1,0 +1,1 @@
+{"version":3,"file":"claude.d.ts","sourceRoot":"","sources":["../../src/ai-capabilities/claude.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,SAAS,EAAE,aAAa,EAAE,cAAc,EAAE,MAAM,SAAS,CAAC;AAiFxE,wBAAgB,cAAc,CAAC,GAAG,EAAE,MAAM,EAAE,IAAI,GAAE,cAAmB,GAAG,SAAS,EAAE,CAclF;AA4BD,wBAAgB,gBAAgB,CAAC,GAAG,EAAE,MAAM,EAAE,IAAI,GAAE,cAAmB,GAAG,aAAa,EAAE,CAuBxF"}

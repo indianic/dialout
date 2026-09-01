@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "Dialout",
+    "slug": "devdash",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "devdash",
+    "userInterfaceStyle": "automatic",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.indianic.devdash",
+      "appleTeamId": "7BCW99KL8P",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Reveal stored project credentials.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.indianic.devdash",
+      "adaptiveIcon": {
+        "backgroundColor": "#0c0e13",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0c0e13"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0c0e13",
+          "dark": {
+            "backgroundColor": "#0c0e13"
+          }
+        }
+      ],
+      "expo-web-browser",
+      "expo-local-authentication",
+      "expo-dev-client"
+    ],
+    "extra": {
+      "apiUrl": "https://www.dialout.dev",
+      "wsUrl": "wss://www.dialout.dev/ws",
+      "router": {},
+      "eas": {
+        "projectId": "76968c2f-ecf4-4251-8db9-f8ff78a4c3b0"
+      }
+    },
+    "owner": "skmundra",
+    "updates": {
+      "url": "https://u.expo.dev/76968c2f-ecf4-4251-8db9-f8ff78a4c3b0"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}

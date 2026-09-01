@@ -1,0 +1,70 @@
+{
+  "name": "dialout",
+  "version": "2.7.4",
+  "description": "Dialout agent — connects a developer machine outbound to your Dialout server for port checks, tmux terminals, filesystem browsing, process control and HTTP tunnels. No inbound ports.",
+  "bin": {
+    "dialout": "./bin/devdash-agent.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "bin",
+    "dist",
+    "scripts/postinstall.js",
+    "README.md",
+    "scripts/prepack.js"
+  ],
+  "scripts": {
+    "prebuild": "npx tsc -p ../devdash-shared/tsconfig.json",
+    "build": "tsc",
+    "test": "npm run build && node --test",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "postinstall": "node scripts/postinstall.js",
+    "release": "./scripts/release-indianic",
+    "release:minor": "./scripts/release-indianic --minor",
+    "release:major": "./scripts/release-indianic --major",
+    "prepack": "node scripts/prepack.js"
+  },
+  "keywords": [
+    "self-hosted",
+    "tmux",
+    "remote-development",
+    "developer-tools",
+    "agent",
+    "dialout"
+  ],
+  "author": "IndiaNIC",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "dependencies": {
+    "@dialout/shared": "^1.0.0",
+    "commander": "^12.1.0",
+    "node-pty": "^1.2.0-beta.12",
+    "smol-toml": "^1.8.0",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.8.3"
+  },
+  "homepage": "https://www.dialout.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indianic/dialout.git",
+    "directory": "packages/devdash-agent"
+  },
+  "bundleDependencies": [
+    "@dialout/shared"
+  ]
+}

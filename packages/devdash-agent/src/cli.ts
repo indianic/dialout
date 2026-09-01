@@ -1,0 +1,1402 @@
+import { Command } from 'commander';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as readline from 'readline';
+import * as https from 'https';
+import * as http from 'http';
+import { loadConfig, saveConfig, saveProfile, applyProfile, getConfigPath, getPidFile, AgentConfig, DEFAULT_SERVER_URL, DEFAULT_LOCAL_SERVER_URL } from './config';
+import { connect, disconnect, isConnected } from './websocket';
+import { installService, uninstallService, isServiceInstalled, getServiceStatus, ServiceKind, installCron, uninstallCron, isCronInstalled, listSupervisors, SupervisorInfo, repairWatchdog, staleSupervisorAdvice, defaultLinuxScope, isLingerEnabled } from './service-installer';
+import { checkForUpdate, performUpdate } from './update-check';
+import { removeCoworkBlock, installCoworkBlock, pickTmuxInstall, sanitizeTokens, unmatchableTokens, coworkViability } from './cowork';
+import { installSshLocalNetworkBlock, removeSshLocalNetworkBlock, sshLocalNetworkApplies, defaultSshConfigPath } from './ssh-local-network';
+import { detectTerminals, currentTerminalToken } from './terminal-detect';
+
+const pkg = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8')
+);
+
+const program = new Command();
+
+// Shared between `status` (reporting) and `repair` (which reuses the same
+// wording when it re-checks after fixing the watchdog).
+const supervisorLabel: Record<SupervisorInfo['kind'], string> = {
+  'launchd-agent': 'launchd (user agent, at login)',
+  'launchd-daemon': 'launchd (system daemon, at boot)',
+  'systemd-user': 'systemd (user unit, at login)',
+  'systemd-system': 'systemd (system unit, at boot)',
+  cron: 'cron watchdog',
+};
+
+program
+  .name('dialout')
+  .description(`Dialout Agent v${pkg.version} — connects your machine to the Dialout server
+
+  Enables remote port scanning, browser-based terminal sessions,
+  and filesystem browsing from the Dialout dashboard.
+
+  Quick Start:
+    $ dialout init                    # interactive setup (remote/local + API key)
+    $ dialout start                   # run in foreground (Ctrl+C to stop)
+    $ dialout start --daemon          # run in background
+    $ dialout stop                    # stop background agent
+    $ dialout restart                 # restart background agent
+    $ dialout status                  # check agent & service status
+
+  Profiles (local + remote configs side by side):
+    $ dialout profiles                # list saved profiles
+    $ dialout use local               # switch active profile
+    $ dialout use remote              # switch back
+    $ dialout start --profile local   # one-off run, active profile unchanged
+
+  Service Management (auto-start on boot):
+    $ dialout install-service         # install launchd (macOS) / systemd (Linux) service
+    $ dialout uninstall-service       # remove OS service
+
+  Watchdog (auto-restart if agent dies):
+    $ dialout setup-cron              # install cron watchdog (default: every 5 min)
+    $ dialout setup-cron -i 3         # check every 3 minutes
+    $ dialout remove-cron             # remove cron watchdog
+    $ dialout repair                  # fix a stale watchdog (e.g. after a package rename)
+
+  Configuration:
+    $ dialout config show             # print current config (API key masked)
+    $ dialout config set <key> <val>  # set a config value
+    $ dialout config path             # show config file path
+    $ dialout config reset            # reset config to defaults (keeps API key)
+
+  Updates:
+    $ dialout update                  # update to latest version
+    $ dialout --version               # show current version
+
+  Config file: ~/.devdash-agent/config.json
+  Docs: https://www.dialout.dev/docs/agent`)
+  .version(pkg.version);
+
+// Helper: readline question
+function createRL() {
+  return readline.createInterface({ input: process.stdin, output: process.stdout });
+}
+function ask(rl: readline.Interface, q: string): Promise<string> {
+  return new Promise((resolve) => rl.question(q, resolve));
+}
+
+// Interactive arrow-key multi-select. Renders checklist.ts frames in raw mode.
+// Returns the selected tokens, or null if the user cancels (Esc/q).
+function promptChecklist(items: import('./checklist').ChecklistItem[]): Promise<string[] | null> {
+  const { moveCursor, toggleAt, toggleAll, selectedTokens, renderChecklist } =
+    require('./checklist') as typeof import('./checklist');
+  const rl = require('readline') as typeof import('readline');
+
+  let state = { items, cursor: 0 };
+  const legend =
+    '  \x1b[2m↑/↓ move · Space toggle · a all · Enter confirm · Esc cancel\x1b[0m\n' +
+    '  \x1b[2mSelected = wrapped in tmux for remote (Shift/Fn+drag to copy). Unselected = fully native.\x1b[0m\n\n';
+
+  rl.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  let prevLines = 0;
+  const draw = () => {
+    const frame = renderChecklist(state);
+    if (prevLines > 0) process.stdout.write(`\x1b[${prevLines}A`); // up N
+    process.stdout.write('\x1b[0J'); // clear to end of screen
+    process.stdout.write(frame + '\n');
+    prevLines = frame.split('\n').length;
+  };
+
+  process.stdout.write(legend);
+  draw();
+
+  return new Promise<string[] | null>((resolve) => {
+    const onKey = (_s: string, key: import('readline').Key | undefined) => {
+      if (!key) return;
+      if (key.ctrl && key.name === 'c') { cleanup(); process.exit(130); }
+      if (key.name === 'up') state = moveCursor(state, -1);
+      else if (key.name === 'down') state = moveCursor(state, 1);
+      else if (key.name === 'space') state = toggleAt(state);
+      else if (key.name === 'a') state = toggleAll(state);
+      else if (key.name === 'return') return finish(selectedTokens(state));
+      else if (key.name === 'escape' || key.name === 'q') return finish(null);
+      else return;
+      draw();
+    };
+    const cleanup = () => {
+      process.stdin.off('keypress', onKey);
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      process.stdin.pause();
+    };
+    const finish = (result: string[] | null) => {
+      cleanup();
+      process.stdout.write('\n');
+      resolve(result);
+    };
+    process.stdin.on('keypress', onKey);
+  });
+}
+
+// Helper: validate API key against the server
+async function validateApiKey(serverUrl: string, apiKey: string): Promise<{ valid: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    try {
+      // Convert wss:// to https:// for the validation endpoint
+      const httpUrl = serverUrl
+        .replace(/^wss:\/\//, 'https://')
+        .replace(/^ws:\/\//, 'http://')
+        .replace(/\/ws\/?$/, '');
+      const url = `${httpUrl}/api/machines?userId=0`;
+
+      const mod = httpUrl.startsWith('https') ? https : http;
+      const req = mod.get(url, {
+        headers: { 'X-API-Key': apiKey },
+        timeout: 8000,
+      }, (res) => {
+        // The server doesn't validate API key on this endpoint directly,
+        // but we can test WebSocket connectivity by attempting a connection
+        resolve({ valid: true });
+      });
+
+      req.on('error', (err) => {
+        resolve({ valid: false, error: `Cannot reach server: ${err.message}` });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ valid: false, error: 'Server connection timed out' });
+      });
+    } catch (err: any) {
+      resolve({ valid: false, error: err.message });
+    }
+  });
+}
+
+// Helper: validate key via WebSocket handshake (most reliable)
+async function validateKeyViaWS(serverUrl: string, apiKey: string): Promise<{ valid: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    try {
+      const WebSocket = require('ws');
+      const url = serverUrl.replace(/\/$/, '') + '/daemon';
+      const ws = new WebSocket(url, { headers: { 'X-API-Key': apiKey } });
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({ valid: false, error: 'Connection timed out' });
+      }, 8000);
+
+      ws.on('open', () => {
+        // Connected — wait briefly for auth response
+      });
+
+      ws.on('message', (raw: Buffer) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'auth_ok') {
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ valid: true });
+          } else if (msg.type === 'auth_error' || msg.type === 'error') {
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ valid: false, error: msg.error || 'Invalid API key' });
+          }
+        } catch {}
+      });
+
+      ws.on('close', (code: number) => {
+        clearTimeout(timeout);
+        if (code === 4001 || code === 4003) {
+          resolve({ valid: false, error: 'Invalid API key — check your key and try again' });
+        }
+        // If we haven't resolved yet, connection closed unexpectedly
+      });
+
+      ws.on('error', (err: Error) => {
+        clearTimeout(timeout);
+        resolve({ valid: false, error: `Connection failed: ${err.message}` });
+      });
+    } catch (err: any) {
+      resolve({ valid: false, error: err.message });
+    }
+  });
+}
+
+// --- init ---
+program
+  .command('init')
+  .description('Configure the agent with server URL and API key (interactive)')
+  .addHelpText('after', `
+  Steps:
+    1. Go to Dialout web UI → MACHINES tab → click GENERATE KEY
+    2. Copy the API key (shown only once)
+    3. Run this command and paste the server URL + API key
+
+  Example:
+    $ dialout init
+    Server URL [wss://www.dialout.dev/ws]:
+    API Key: mch_K27F43P1HcN8AIO3EDHwkKvgZl5hkV1t`)
+  .action(async () => {
+    const rl = createRL();
+    const config = loadConfig();
+
+    console.log('');
+    console.log('\x1b[1mDialout Agent Setup\x1b[0m');
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    console.log('');
+
+    // Step 1: Which server? Saved as a named profile so local and remote
+    // configs coexist — switch anytime with "devdash-agent use <profile>".
+    console.log('\x1b[1mWhere should this agent connect?\x1b[0m');
+    console.log('');
+    console.log(`  \x1b[36m1)\x1b[0m Remote server — ${DEFAULT_SERVER_URL}`);
+    console.log(`  \x1b[36m2)\x1b[0m Local dev     — ${DEFAULT_LOCAL_SERVER_URL} (Dialout running on this machine)`);
+    console.log('  \x1b[36m3)\x1b[0m Custom URL');
+    console.log('');
+    const target = (await ask(rl, 'Choose [1-3, default 1]: ')).trim();
+
+    let profileName: string;
+    let defaultUrl: string;
+    if (target === '2') {
+      profileName = 'local';
+      defaultUrl = config.profiles?.local?.serverUrl || DEFAULT_LOCAL_SERVER_URL;
+    } else if (target === '3') {
+      profileName = (await ask(rl, `Profile name [\x1b[36mcustom\x1b[0m]: `)).trim() || 'custom';
+      defaultUrl = config.profiles?.[profileName]?.serverUrl || config.serverUrl || DEFAULT_SERVER_URL;
+    } else {
+      profileName = 'remote';
+      // A localhost URL saved in the "remote" profile is leftover from local
+      // testing — choosing Remote must always default to a real remote server.
+      const savedRemote = config.profiles?.remote?.serverUrl;
+      defaultUrl =
+        savedRemote && !/^wss?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/.test(savedRemote)
+          ? savedRemote
+          : DEFAULT_SERVER_URL;
+    }
+
+    const serverUrlInput = await ask(rl, `Server URL [\x1b[36m${defaultUrl}\x1b[0m]: `);
+    const serverUrl = (serverUrlInput.trim() || defaultUrl).replace(/\/$/, '');
+
+    // Step 2: API Key (per profile — a local server issues different keys
+    // than the remote one)
+    const existingKey = config.profiles?.[profileName]?.apiKey || '';
+    const keyPrompt = existingKey
+      ? `API Key [\x1b[90m****${existingKey.slice(-4)}\x1b[0m]: `
+      : 'API Key: ';
+    const apiKeyInput = (await ask(rl, keyPrompt)).trim();
+    const apiKey = apiKeyInput || existingKey;
+
+    if (!apiKey) {
+      console.error('\n\x1b[31mAPI key is required.\x1b[0m');
+      console.error('Generate one at: Dialout → MACHINES tab → GENERATE KEY');
+      rl.close();
+      process.exit(1);
+    }
+
+    // Step 3: Validate key
+    console.log('\n\x1b[90mValidating API key...\x1b[0m');
+    const result = await validateKeyViaWS(serverUrl, apiKey);
+
+    if (!result.valid) {
+      console.error(`\x1b[31mValidation failed: ${result.error}\x1b[0m`);
+      const retry = await ask(rl, 'Save config anyway? (y/N): ');
+      if (retry.toLowerCase() !== 'y') {
+        rl.close();
+        process.exit(1);
+      }
+    } else {
+      console.log('\x1b[32mAPI key validated successfully!\x1b[0m');
+    }
+
+    const saved = saveProfile(profileName, { serverUrl, apiKey });
+    Object.assign(config, saved);
+    console.log(`\nSaved profile \x1b[36m${profileName}\x1b[0m (now active) → ${serverUrl}`);
+    console.log(`Config file: ${getConfigPath()}`);
+    const otherProfiles = Object.keys(saved.profiles || {}).filter((n) => n !== profileName);
+    if (otherProfiles.length > 0) {
+      console.log(`Switch anytime: devdash-agent use ${otherProfiles[0]}`);
+    }
+
+    // Step 4: Ask how to start
+    console.log('');
+    console.log('\x1b[1mHow would you like to run the agent?\x1b[0m');
+    console.log('');
+    console.log('  \x1b[36m1)\x1b[0m Foreground    — run now in this terminal (for testing)');
+    console.log('  \x1b[36m2)\x1b[0m Service       — auto-start on boot (launchd/systemd)');
+    console.log('  \x1b[36m3)\x1b[0m Cron Watchdog — auto-restart if it dies (cron job)');
+    console.log('  \x1b[36m4)\x1b[0m Skip          — configure later');
+    console.log('');
+
+    const choice = await ask(rl, 'Choose [1-4]: ');
+    rl.close();
+
+    switch (choice.trim()) {
+      case '1':
+        console.log('\n\x1b[90mStarting in foreground (Ctrl+C to stop)...\x1b[0m\n');
+        connect(config, () => {
+          console.log('[devdash-agent] Connected and ready.');
+        });
+        process.on('SIGINT', () => { disconnect(); process.exit(0); });
+        process.on('SIGTERM', () => { disconnect(); process.exit(0); });
+        break;
+
+      case '2':
+        installService();
+        // Check if cron should also be set up
+        if (!isCronInstalled()) {
+          console.log('\n\x1b[33mTip:\x1b[0m Add a cron watchdog for extra reliability:');
+          console.log('  devdash-agent setup-cron');
+        }
+        break;
+
+      case '3': {
+        const intervalStr = await (async () => {
+          const rl2 = createRL();
+          const v = await ask(rl2, `Check interval in minutes [\x1b[36m5\x1b[0m]: `);
+          rl2.close();
+          return v;
+        })();
+        const interval = parseInt(intervalStr, 10) || config.cronInterval || 5;
+        config.cronInterval = interval;
+        saveConfig(config);
+
+        // Start daemon first
+        const { fork } = require('child_process');
+        const child = fork(path.resolve(__dirname, 'index.js'), [], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+        const pidFile = getPidFile();
+        fs.writeFileSync(pidFile, String(child.pid));
+        console.log(`\nAgent started in background (PID: ${child.pid})`);
+
+        // Install cron
+        installCron(interval);
+        break;
+      }
+
+      case '4':
+      default:
+        console.log('\nRun "devdash-agent start" when ready.');
+        break;
+    }
+  });
+
+// --- profiles ---
+program
+  .command('profiles')
+  .description('List saved connection profiles (local/remote/…)')
+  .action(() => {
+    const config = loadConfig();
+    const names = Object.keys(config.profiles || {});
+    if (names.length === 0) {
+      console.log('No profiles saved yet. Run: devdash-agent init');
+      return;
+    }
+    console.log('');
+    console.log('Connection Profiles');
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    for (const name of names) {
+      const p = config.profiles![name];
+      const active = name === config.activeProfile;
+      const marker = active ? '\x1b[32m●\x1b[0m' : ' ';
+      console.log(`  ${marker} ${name.padEnd(10)} ${p.serverUrl}  \x1b[90m(key ****${p.apiKey.slice(-4)})\x1b[0m${active ? '  \x1b[32mactive\x1b[0m' : ''}`);
+    }
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    console.log('Switch with: devdash-agent use <name>');
+    console.log('');
+  });
+
+// --- use ---
+program
+  .command('use <profile>')
+  .description('Switch the active connection profile (e.g. local, remote)')
+  .addHelpText('after', `
+  Examples:
+    $ dialout use local          # point the agent at your local Dialout
+    $ dialout use remote         # point it back at the live server
+    $ dialout restart            # apply to a running background agent`)
+  .action((name: string) => {
+    const config = loadConfig();
+    const profile = config.profiles?.[name];
+    if (!profile) {
+      const names = Object.keys(config.profiles || {});
+      console.error(`Unknown profile: ${name}`);
+      console.error(names.length ? `Available: ${names.join(', ')}` : 'No profiles yet — run: devdash-agent init');
+      process.exit(1);
+    }
+    saveProfile(name, profile, true);
+    console.log(`Active profile: \x1b[36m${name}\x1b[0m → ${profile.serverUrl}`);
+    console.log('If the agent is running, apply with: devdash-agent restart');
+  });
+
+// --- start ---
+program
+  .command('start')
+  .description('Start the agent and connect to the Dialout server')
+  .option('--daemon', 'Run in background (fork process, survives terminal close)')
+  .option('--profile <name>', 'Use a saved profile for this run only (active profile unchanged)')
+  .addHelpText('after', `
+  Modes:
+    devdash-agent start           Foreground — logs to terminal, Ctrl+C to stop
+    devdash-agent start --daemon  Background — forks process, use "stop" to end
+    devdash-agent install-service Permanent  — auto-starts on boot (launchd/systemd)
+    devdash-agent setup-cron      Watchdog   — cron checks every N minutes, restarts if dead
+
+  Examples:
+    $ dialout start                    # test connection in foreground
+    $ dialout start --profile local    # one-off run against local Dialout
+    $ dialout start --daemon           # run in background for this session
+    $ dialout stop                     # stop background agent`)
+  .action(async (opts) => {
+    await checkForUpdate();
+
+    let config = loadConfig();
+    if (opts.profile) {
+      if (!config.profiles?.[opts.profile]) {
+        console.error(`Unknown profile: ${opts.profile}`);
+        console.error(`Available: ${Object.keys(config.profiles || {}).join(', ') || '(none — run: devdash-agent init)'}`);
+        process.exit(1);
+      }
+      config = applyProfile(config, opts.profile);
+      console.log(`[devdash-agent] Using profile "${opts.profile}" → ${config.serverUrl}`);
+    }
+
+    if (!config.serverUrl || !config.apiKey) {
+      console.error('Not configured. Run: devdash-agent init');
+      process.exit(1);
+    }
+
+    if (opts.daemon) {
+      const { fork } = require('child_process');
+      const child = fork(path.resolve(__dirname, 'index.js'), [], {
+        detached: true,
+        stdio: 'ignore',
+        env: opts.profile
+          ? { ...process.env, DEVDASH_AGENT_PROFILE: opts.profile }
+          : process.env,
+      });
+      child.unref();
+
+      const pidFile = getPidFile();
+      fs.writeFileSync(pidFile, String(child.pid));
+
+      // Verify before claiming. The child exits within milliseconds when
+      // another supervisor (a systemd/launchd service, another daemon) already
+      // holds the single-instance lock for this server URL — and its stdio is
+      // 'ignore', so the "Already running — exiting" line it prints goes
+      // nowhere. Reporting the fork's pid unconditionally announced success
+      // for a process that was already dead, which reads as "the daemon keeps
+      // dying" rather than "something else is already running it".
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const stillAlive = (() => {
+        try { process.kill(child.pid!, 0); return true; } catch { return false; }
+      })();
+      if (!stillAlive) {
+        try { fs.unlinkSync(pidFile); } catch {}
+        console.error('\x1b[33mThe agent exited immediately.\x1b[0m');
+        console.error('Usually this means another supervisor is already running it for this server URL.');
+        console.error('Check what is running:  devdash-agent status');
+        process.exit(1);
+      }
+
+      console.log(`Agent started in background (PID: ${child.pid})`);
+      console.log('Stop with: devdash-agent stop');
+
+      // Suggest cron if not installed
+      if (!isCronInstalled() && !isServiceInstalled()) {
+        console.log('\n\x1b[33mTip:\x1b[0m Set up auto-restart with: devdash-agent setup-cron');
+      }
+      process.exit(0);
+    }
+
+    // Foreground mode
+    console.log('[devdash-agent] Starting in foreground (Ctrl+C to stop)...');
+    connect(config, () => {
+      console.log('[devdash-agent] Connected and ready.');
+    });
+
+    process.on('SIGINT', () => {
+      console.log('\n[devdash-agent] Stopping...');
+      disconnect();
+      process.exit(0);
+    });
+
+    process.on('SIGTERM', () => {
+      disconnect();
+      process.exit(0);
+    });
+  });
+
+// --- stop ---
+program
+  .command('stop')
+  .description('Stop the background agent (started with --daemon)')
+  .addHelpText('after', `
+  Stops the agent that was started with "devdash-agent start --daemon".
+  Has no effect on service-installed agents — use uninstall-service for those.`)
+  .action(() => {
+    const pidFile = getPidFile();
+    if (!fs.existsSync(pidFile)) {
+      console.log('No running agent found.');
+      console.log('If running as service: devdash-agent uninstall-service');
+      return;
+    }
+
+    const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(`Agent stopped (PID: ${pid})`);
+    } catch (err: any) {
+      if (err.code === 'ESRCH') {
+        console.log('Agent is not running (stale PID file removed).');
+      } else {
+        console.error('Failed to stop agent:', err.message);
+      }
+    }
+    fs.unlinkSync(pidFile);
+  });
+
+// --- restart ---
+program
+  .command('restart')
+  .description('Restart the background agent (stop + start --daemon)')
+  .addHelpText('after', `
+  Convenience command that stops any running daemon and starts a fresh one.
+  Equivalent to running "devdash-agent stop && devdash-agent start --daemon".
+
+  Examples:
+    $ dialout restart            # restart background agent
+    $ dialout status             # verify it's running`)
+  .action(async () => {
+    await checkForUpdate();
+
+    const config = loadConfig();
+    if (!config.serverUrl || !config.apiKey) {
+      console.error('Not configured. Run: devdash-agent init');
+      process.exit(1);
+    }
+
+    // Stop existing daemon if running
+    const pidFile = getPidFile();
+    if (fs.existsSync(pidFile)) {
+      const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+      try {
+        process.kill(pid, 'SIGTERM');
+        console.log(`Stopped previous agent (PID: ${pid})`);
+      } catch (err: any) {
+        if (err.code !== 'ESRCH') {
+          console.error('Failed to stop agent:', err.message);
+        }
+      }
+      fs.unlinkSync(pidFile);
+    }
+
+    // Start new daemon
+    const { fork } = require('child_process');
+    const child = fork(path.resolve(__dirname, 'index.js'), [], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    fs.writeFileSync(pidFile, String(child.pid));
+    console.log(`Agent restarted in background (PID: ${child.pid})`);
+    process.exit(0);
+  });
+
+// --- status ---
+program
+  .command('status')
+  .description('Show agent connection status, config, and service state')
+  .addHelpText('after', `
+  Shows: server URL, API key (masked), config path, service state, cron state, process state.`)
+  .action(() => {
+    const config = loadConfig();
+    const pidFile = getPidFile();
+    const svc = getServiceStatus();
+    const cronInstalled = isCronInstalled();
+
+    const kindLabel: Record<ServiceKind, string> = {
+      'launchd-agent': 'launchd, at login',
+      'launchd-daemon': 'launchd, at boot',
+      'systemd-user': 'systemd, at login',
+      'systemd-system': 'systemd, at boot',
+    };
+
+    console.log('');
+    console.log('Dialout Agent Status');
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    const profileNames = Object.keys(config.profiles || {});
+    console.log(`  Profile:   ${config.activeProfile ? `\x1b[36m${config.activeProfile}\x1b[0m` : '(none)'}${profileNames.length > 1 ? ` \x1b[90m(saved: ${profileNames.join(', ')})\x1b[0m` : ''}`);
+    console.log(`  Server:    ${config.serverUrl || '(not configured)'}`);
+    console.log(`  API Key:   ${config.apiKey ? '****' + config.apiKey.slice(-4) : '(not set)'}`);
+    console.log(`  Config:    ${getConfigPath()}`);
+    console.log(`  Service:   ${svc.installed ? `\x1b[32minstalled\x1b[0m${svc.kind ? ` (${kindLabel[svc.kind]})` : ''}` : 'not installed'}`);
+    console.log(`  Cron:      ${cronInstalled ? `\x1b[32minstalled\x1b[0m (every ${config.cronInterval || 5} min)` : 'not installed'}`);
+
+    // Every supervisor that could be launching this agent, not just the
+    // first match (getServiceStatus()/isServiceInstalled() intentionally
+    // stop at the first one). Detection only — this never stops a unit,
+    // kills a process, or edits the crontab.
+    const supervisors = listSupervisors();
+
+    if (supervisors.length > 1) {
+      console.log('');
+      console.log('\x1b[33m  ⚠ Multiple supervisors are managing this agent:\x1b[0m');
+      for (const s of supervisors) {
+        // "running" means a live process was found for launchd/systemd
+        // (svc.pid !== null); cron has no live process of its own to
+        // probe — it's a scheduled trigger, not a fourth daemon — so it
+        // gets its own word instead of borrowing "running"/"not running"
+        // and implying it's an active process racing the others.
+        const state = s.kind === 'cron'
+          ? `scheduled (fires every ${config.cronInterval || 5} min)`
+          : (s.pid !== null ? `running (PID ${s.pid})` : (s.running ? 'running' : 'not running'));
+        console.log(`\x1b[33m    - ${supervisorLabel[s.kind]}: ${s.path} — ${state}${s.stale ? ' [STALE]' : ''}\x1b[0m`);
+      }
+      console.log('\x1b[33m    More than one supervisor causes the connect/disconnect (1006) flapping you may be seeing —\x1b[0m');
+      console.log('\x1b[33m    the single-instance lock will keep only one process alive and make all the others exit.\x1b[0m');
+    }
+
+    // A systemd user unit without lingering is a time bomb that `status`
+    // used to report as a healthy installed service: systemd-logind stops
+    // user@<uid>.service when the last session ends, so the agent dies on
+    // every logout and silently returns on the next login. Nothing else in
+    // this output would ever hint at it.
+    if (process.platform === 'linux' && supervisors.some((s) => s.kind === 'systemd-user')) {
+      const user = os.userInfo().username;
+      if (!isLingerEnabled(user)) {
+        console.log('');
+        console.log('\x1b[33m  ⚠ Installed as a systemd USER unit with lingering OFF.\x1b[0m');
+        console.log('\x1b[33m    systemd stops it when your last session ends — the agent dies every time you log out\x1b[0m');
+        console.log('\x1b[33m    and only comes back when you log in again.\x1b[0m');
+        console.log(`\x1b[33m    Fix:  sudo loginctl enable-linger ${user}\x1b[0m`);
+        console.log('\x1b[33m    Or:   devdash-agent install-service --system   (runs at boot, in system.slice)\x1b[0m');
+      }
+    }
+
+    for (const s of supervisors.filter((s) => s.stale)) {
+      console.log('');
+      for (const line of staleSupervisorAdvice(s)) {
+        console.log(`\x1b[33m${line}\x1b[0m`);
+      }
+    }
+
+    if (svc.installed) {
+      // The service manager (launchd/systemd) owns the process — ask it, not the pidfile.
+      if (svc.running) {
+        console.log(`  Process:   \x1b[32mrunning\x1b[0m (PID: ${svc.pid}, managed by ${svc.kind?.startsWith('launchd') ? 'launchd' : 'systemd'})`);
+      } else {
+        console.log(`  Process:   \x1b[31mnot running\x1b[0m (service installed but stopped — check logs in ~/.devdash-agent/logs)`);
+      }
+    } else if (fs.existsSync(pidFile)) {
+      // Manual background mode (devdash-agent start --daemon)
+      const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+      try {
+        process.kill(pid, 0);
+        console.log(`  Process:   \x1b[32mrunning\x1b[0m (PID: ${pid}, background)`);
+      } catch {
+        console.log(`  Process:   not running (stale PID)`);
+      }
+    } else {
+      console.log(`  Process:   not running`);
+    }
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    console.log('');
+  });
+
+// On macOS the tmux server is the process Local Network Privacy judges, so
+// every tmux session on the machine — including ones the user opens from their
+// own terminal app — is denied LAN access and cannot ssh to a local git remote
+// (the measured long form is in ssh-local-network.ts). Installing the service
+// is the moment the machine starts hosting tmux sessions, so it is also the
+// moment to install the ssh_config default that works around it.
+function applySshLocalNetworkWorkaround(): void {
+  if (!sshLocalNetworkApplies()) return;
+  const target = defaultSshConfigPath();
+  try {
+    const result = installSshLocalNetworkBlock(target);
+    // 'skipped-existing' means their own ConnectTimeout already wins;
+    // 'updated' means the block was already there. Neither is news.
+    if (result === 'skipped-existing' || result === 'updated') return;
+    console.log(`  ssh: added a ConnectTimeout default to ${target}`);
+    console.log('       (macOS denies local-network access to the tmux server, so without this');
+    console.log('        git/ssh to a LAN host fails inside every tmux session on this machine.');
+    console.log('        To fix it properly, allow tmux under System Settings >');
+    console.log('        Privacy & Security > Local Network.)');
+  } catch (err) {
+    // Never fail an install over this — the service itself is still fine.
+    console.log(`  ssh: could not update ${target} (${(err as Error).message})`);
+  }
+}
+
+function removeSshLocalNetworkWorkaround(): void {
+  const target = defaultSshConfigPath();
+  try {
+    if (!fs.existsSync(target)) return;
+    const before = fs.readFileSync(target, 'utf-8');
+    const after = removeSshLocalNetworkBlock(before);
+    if (after === before) return;
+    fs.writeFileSync(target, after);
+    console.log(`  ssh: removed the ConnectTimeout block from ${target}`);
+  } catch {
+    // Best effort — a leftover block is harmless.
+  }
+}
+
+// --- install-service ---
+program
+  .command('install-service')
+  .description('Install as OS service — auto-starts on login (or boot with --system)')
+  .option('--system', 'Run at boot, before login (LaunchDaemon / systemd system unit; needs sudo)')
+  .option('--login', 'Per-user service that starts at login (skip the interactive prompt)')
+  .addHelpText('after', `
+  Installs the agent as a system service so it starts automatically.
+
+  Default (per-user, starts at LOGIN):
+    macOS  — LaunchAgent at ~/Library/LaunchAgents/com.devdash.agent.plist
+    Linux  — systemd user service at ~/.config/systemd/user/devdash-agent.service
+
+  --system (starts at BOOT, before anyone logs in — requires sudo):
+    macOS  — LaunchDaemon at /Library/LaunchDaemons/com.devdash.agent.plist
+    Linux  — systemd system unit at /etc/systemd/system/devdash-agent.service
+
+  Must run "devdash-agent init" first to configure server URL and API key.
+
+  With no flag on an interactive terminal, it asks whether to start at boot
+  (sudo) or at login.
+
+  Examples:
+    $ dialout install-service            # ask: boot or login
+    $ dialout install-service --system   # start at boot (prompts for sudo)
+    $ dialout install-service --login     # start at login, no prompt
+
+  To remove: devdash-agent uninstall-service`)
+  .action(async (opts) => {
+    const config = loadConfig();
+    if (!config.serverUrl || !config.apiKey) {
+      console.error('Not configured. Run "devdash-agent init" first.');
+      process.exit(1);
+    }
+
+    let system: boolean;
+    if (opts.system) {
+      system = true;
+    } else if (opts.login) {
+      system = false;
+    } else if (process.platform === 'linux' && defaultLinuxScope() === 'system') {
+      // Root on Linux: there is nothing to weigh. The boot unit needs no sudo
+      // password (we already are root), starts before anyone logs in, and
+      // lives in system.slice where logging out cannot touch it. Asking
+      // "[y/N]" here offered a free upgrade at a fictional price and defaulted
+      // to the answer that dies on logout.
+      system = true;
+      console.log('Running as root — installing the boot service (starts at boot, survives logout).');
+      console.log('Use --login for a per-user service instead.\n');
+    } else if (process.stdin.isTTY) {
+      const rl = createRL();
+      const answer = await ask(
+        rl,
+        'Start the agent at boot, before you log in? Requires admin password. [y/N]: '
+      );
+      rl.close();
+      system = /^y(es)?$/i.test(answer.trim());
+      if (!system && process.platform === 'linux') {
+        console.log('Installing the per-user service — lingering will be enabled so it survives logout.');
+      }
+    } else {
+      // Non-interactive (piped/CI) and not root: the per-user service is the
+      // only one installable without a password. Lingering keeps it alive.
+      system = false;
+    }
+
+    installService({ system });
+    applySshLocalNetworkWorkaround();
+    process.exit(0);
+  });
+
+// --- uninstall-service ---
+program
+  .command('uninstall-service')
+  .description('Remove OS service — stops auto-start on boot')
+  .addHelpText('after', `
+  Removes the service installed by "install-service".
+  The agent will no longer start automatically on login/boot.
+
+  A boot service (install-service --system) is owned by root, so this may
+  prompt for your password — the same way installing it did.
+
+  This removes the SERVICE only. If a cron watchdog or a manual daemon is also
+  running the agent, it keeps running; the command says so and names the fix.`)
+  .action(() => {
+    const result = uninstallService();
+
+    // Exiting 0 after removing nothing is what made this look like it worked
+    // while the daemon kept running. Fail loudly instead.
+    if (result.pending.length > 0) {
+      console.error('\n\x1b[31mService NOT removed.\x1b[0m Run the commands above, then: devdash-agent status');
+      process.exitCode = 1;
+      return;
+    }
+    removeSshLocalNetworkWorkaround();
+
+    if (!result.removed) return;
+
+    // The service is gone, but it is not the only thing that can start the
+    // agent. Point at the leftovers rather than letting `status` surprise them.
+    const leftovers = listSupervisors().filter((s) => s.kind === 'cron');
+    if (leftovers.length > 0) {
+      console.log('\n\x1b[33mA cron watchdog is still installed and will restart the agent.\x1b[0m');
+      console.log('  Remove it with: devdash-agent remove-cron');
+    }
+    if (fs.existsSync(getPidFile())) {
+      const pid = parseInt(fs.readFileSync(getPidFile(), 'utf-8').trim(), 10);
+      let alive = false;
+      try { process.kill(pid, 0); alive = true; } catch { /* stale */ }
+      if (alive) {
+        console.log(`\n\x1b[33mA manually started agent is still running (PID ${pid}).\x1b[0m`);
+        console.log('  Stop it with: devdash-agent stop');
+      }
+    }
+  });
+
+// --- setup-cron ---
+program
+  .command('setup-cron')
+  .description('Install cron watchdog — auto-restarts agent if it dies')
+  .option('-i, --interval <minutes>', 'Check interval in minutes (default: 5)', '5')
+  .addHelpText('after', `
+  Creates a cron job that checks if the agent is running every N minutes.
+  If the agent is dead, the watchdog restarts it automatically.
+
+  The default interval is 5 minutes. You can customize it:
+    $ dialout setup-cron                # every 5 minutes (default)
+    $ dialout setup-cron -i 3           # every 3 minutes
+    $ dialout setup-cron --interval 10  # every 10 minutes
+
+  To remove: devdash-agent remove-cron`)
+  .action((opts) => {
+    const config = loadConfig();
+    if (!config.serverUrl || !config.apiKey) {
+      console.error('Not configured. Run "devdash-agent init" first.');
+      process.exit(1);
+    }
+
+    // A launchd/systemd service already supervises the agent and auto-restarts
+    // it on death. Adding a cron watchdog on top means TWO independent
+    // supervisors — the exact configuration that used to spawn duplicate
+    // daemons (the service's process isn't tracked in daemon.pid, so the
+    // watchdog thinks nothing is running and forks a second one). Refuse.
+    const svc = getServiceStatus();
+    if (svc.installed) {
+      console.log('An OS service is already installed — it auto-restarts the agent on its own.');
+      console.log('A cron watchdog would be a second, conflicting supervisor, so this is a no-op.');
+      console.log('To use cron instead, run: devdash-agent uninstall-service first.');
+      process.exit(0);
+    }
+
+    const interval = parseInt(opts.interval, 10) || 5;
+    config.cronInterval = interval;
+    saveConfig(config);
+
+    // Start daemon if not running. (Even if a duplicate slips through here, the
+    // agent's per-URL single-instance lock makes the extra process exit at once.)
+    const pidFile = getPidFile();
+    let isRunning = false;
+    if (fs.existsSync(pidFile)) {
+      const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+      try { process.kill(pid, 0); isRunning = true; } catch {}
+    }
+
+    if (!isRunning) {
+      const { fork } = require('child_process');
+      const child = fork(path.resolve(__dirname, 'index.js'), [], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+      fs.writeFileSync(pidFile, String(child.pid));
+      console.log(`Agent started in background (PID: ${child.pid})`);
+    }
+
+    installCron(interval);
+    process.exit(0);
+  });
+
+// --- remove-cron ---
+program
+  .command('remove-cron')
+  .description('Remove cron watchdog — stops auto-restart')
+  .addHelpText('after', `
+  Removes the cron job installed by "setup-cron".
+  The agent will no longer auto-restart if it dies.
+  Note: this does NOT stop the currently running agent.`)
+  .action(() => {
+    uninstallCron();
+  });
+
+// --- repair ---
+program
+  .command('repair')
+  .description('Rewrite a stale cron watchdog left by an old install/rename')
+  .addHelpText('after', `
+  Fixes exactly one thing: a cron watchdog (~/.devdash-agent/watchdog.sh)
+  whose SCRIPT= line still points at an old, renamed, or uninstalled
+  package build — a machine can end up resurrecting a deprecated version
+  every few minutes, fighting the real daemon for the same registration.
+
+  Repair rewrites ONLY that path. It never deletes a unit file, kills a
+  process, or edits the crontab. When more than one supervisor (launchd /
+  systemd / cron) is managing this agent, repair explains what to remove
+  and stops there — it does not choose for you.
+
+  Examples:
+    $ dialout repair
+    $ dialout status              # see current supervisor state`)
+  .action(() => {
+    let repairResult: { repaired: boolean; from: string; to: string };
+    try {
+      repairResult = repairWatchdog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log('');
+      console.log('Dialout Agent Repair');
+      console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+      console.log(`\x1b[31m  ✗ Could not repair the watchdog: ${message}\x1b[0m`);
+      console.log('    Nothing was changed. Check that ~/.devdash-agent/watchdog.sh is a regular,');
+      console.log('    readable file you have permission to modify, then try again.');
+      console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+      console.log('');
+      process.exitCode = 1;
+      return;
+    }
+
+    const { repaired, from, to } = repairResult;
+
+    console.log('');
+    console.log('Dialout Agent Repair');
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+
+    if (repaired) {
+      console.log('\x1b[32m  ✓ Rewrote stale watchdog:\x1b[0m ~/.devdash-agent/watchdog.sh');
+      console.log(`    from: ${from}`);
+      console.log(`    to:   ${to}`);
+      console.log('    (previous version backed up alongside it as watchdog.sh.bak-<timestamp>)');
+    } else {
+      console.log('  Watchdog check: \x1b[32mnothing to repair\x1b[0m (absent, or SCRIPT= already correct).');
+    }
+
+    // Detection only, same as `status` — repair never removes a supervisor
+    // itself (Constraint 3). This just re-reports the full picture after
+    // fixing the one thing it's safe to fix automatically.
+    const supervisors = listSupervisors();
+    const staleRemaining = supervisors.filter((s) => s.stale);
+
+    if (supervisors.length > 1) {
+      console.log('');
+      console.log('\x1b[33m  ⚠ Multiple supervisors are managing this agent:\x1b[0m');
+      for (const s of supervisors) {
+        const state = s.kind === 'cron'
+          ? 'scheduled watchdog'
+          : (s.pid !== null ? `running (PID ${s.pid})` : (s.running ? 'running' : 'not running'));
+        console.log(`\x1b[33m    - ${supervisorLabel[s.kind]}: ${s.path} — ${state}${s.stale ? ' [STALE]' : ''}\x1b[0m`);
+      }
+      console.log('\x1b[33m  Repair only fixes the watchdog\x27s SCRIPT= path — it does not remove a supervisor you may still depend on.\x1b[0m');
+
+      // A remaining stale unit needs its own fix command — "repair" cannot
+      // touch it, and this listing alone would otherwise leave the operator
+      // with a [STALE] tag and no next step for that specific supervisor.
+      for (const s of staleRemaining) {
+        console.log('');
+        for (const line of staleSupervisorAdvice(s)) {
+          console.log(`\x1b[33m${line}\x1b[0m`);
+        }
+      }
+
+      console.log('');
+      console.log('  Remove the extra one(s) yourself:');
+      if (supervisors.some((s) => s.kind === 'cron')) {
+        console.log('    devdash-agent remove-cron         # drop the cron watchdog');
+      }
+      if (supervisors.some((s) => s.kind !== 'cron')) {
+        console.log('    devdash-agent uninstall-service   # drop the launchd/systemd service');
+      }
+    } else if (staleRemaining.length > 0) {
+      // Exactly one supervisor total, and it's still stale (e.g. a lone
+      // stale systemd/launchd unit — repair only ever touches the watchdog).
+      // This is NOT a clean state: give the same actionable advice `status`
+      // would, instead of a false "no conflicting supervisors" all-clear.
+      console.log('');
+      for (const s of staleRemaining) {
+        for (const line of staleSupervisorAdvice(s)) {
+          console.log(`\x1b[33m${line}\x1b[0m`);
+        }
+      }
+    } else {
+      console.log('');
+      console.log('  No conflicting supervisors detected.');
+    }
+
+    console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
+    console.log('');
+  });
+
+// --- setup-cowork ---
+
+program
+  .command('setup-cowork')
+  .description('Choose which terminal app(s) auto-wrap into tmux for Dialout remote access')
+  .option('--remove', 'Uninstall the wrapper, clear the allowlist, and go fully native')
+  .option('--terminals <csv>', 'Non-interactive: comma-separated terminal tokens to allow')
+  .option('--yes', 'Auto-confirm installing tmux if it is missing')
+  .option('--adopt-all', 'Adopt all existing tmux sessions non-interactively')
+  .option('--no-adopt', 'Skip adopting existing sessions')
+  .action(async (opts: { remove?: boolean; terminals?: string; yes?: boolean; adoptAll?: boolean; adopt?: boolean }) => {
+    const { tmuxAvailable, listSessions } = require('./tmux-manager') as typeof import('./tmux-manager');
+    const { execFileSync } = require('child_process') as typeof import('child_process');
+    const { hasCommand } = require('./has-command') as typeof import('./has-command');
+    const config = loadConfig();
+    const rcFiles = [path.join(os.homedir(), '.zshrc'), path.join(os.homedir(), '.bashrc')];
+
+    // --remove: strip the block, clear the allowlist, go native.
+    if (opts.remove) {
+      for (const rc of rcFiles) {
+        if (!fs.existsSync(rc)) continue;
+        fs.writeFileSync(rc, removeCoworkBlock(fs.readFileSync(rc, 'utf-8')));
+        console.log(`  removed wrapper from ${rc}`);
+      }
+      removeSshLocalNetworkWorkaround();
+      config.cowork = false;
+      config.coworkTerminals = [];
+      saveConfig(config);
+      console.log('Reverted to native terminals. Open terminals are unaffected; new shells start normally.');
+      return;
+    }
+
+    // tmux check → offer to install.
+    if (!(await tmuxAvailable())) {
+      const plan = pickTmuxInstall(process.platform, hasCommand);
+      if (!plan.canAuto) {
+        console.log('\x1b[33mtmux is not installed.\x1b[0m');
+        console.log(`  ${plan.manual}`);
+        process.exitCode = 1;
+        return;
+      }
+      console.log('\x1b[33mtmux is not installed.\x1b[0m It will be installed with:');
+      console.log(`  ${plan.command}`);
+      let go = opts.yes === true;
+      if (!go) {
+        const rl = createRL();
+        const ans = (await ask(rl, 'Run this now? [y/N]: ')).trim().toLowerCase();
+        rl.close();
+        go = ans === 'y' || ans === 'yes';
+      }
+      if (!go) {
+        console.log(`Declined. Install tmux manually (${plan.command}) then re-run: devdash-agent setup-cowork`);
+        process.exitCode = 1;
+        return;
+      }
+      try {
+        execFileSync('/bin/sh', ['-c', plan.command], { stdio: 'inherit' });
+      } catch {
+        console.log('\x1b[31mtmux install failed.\x1b[0m Install it manually then re-run setup-cowork.');
+        process.exitCode = 1;
+        return;
+      }
+      if (!(await tmuxAvailable())) {
+        console.log('\x1b[31mtmux still not found after install.\x1b[0m Install it manually then re-run setup-cowork.');
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    // Terminal selection.
+    const detected = detectTerminals();
+
+    // Guard rail against the OTHER reported silent-success trap: a headless
+    // SSH-only server showed a 16-row checklist, every row "(not installed)",
+    // none current — and even a perfect pick there could never activate
+    // cowork, since renderCoworkBlock gates the whole wrapper on
+    // `[ -z "$SSH_TTY" ]`. Explicit --terminals still gets the warn-don't-
+    // refuse treatment (dotfile-syncing users keep working, matching
+    // unmatchableTokens below); the interactive checklist is refused outright
+    // since no selection there could ever help.
+    const viability = coworkViability(process.env, detected.some((t) => t.installed));
+    if (!viability.usable) {
+      for (const reason of viability.reasons) {
+        if (reason === 'ssh-session') {
+          console.log('\x1b[33mThis is an SSH session — the cowork wrapper deliberately skips SSH logins, so no selection here can ever activate it.\x1b[0m');
+        } else {
+          console.log('\x1b[33mNo terminal emulator is installed on this machine — cowork wraps the app you open a terminal FROM, which runs on your local machine, not this server.\x1b[0m');
+        }
+      }
+      console.log('Instead, open a terminal from the Dialout panel: it creates a tmux session on this machine directly and needs no cowork.');
+      if (typeof opts.terminals !== 'string') {
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    let selected: string[];
+    if (typeof opts.terminals === 'string') {
+      selected = sanitizeTokens(opts.terminals.split(',').map((t) => t.trim()).filter(Boolean));
+    } else {
+      // installed apps first; current terminal is NOT pre-ticked (only prior picks are).
+      const ordered = [...detected].sort((a, b) => Number(b.installed) - Number(a.installed));
+      const prev = new Set<string>(config.coworkTerminals ?? []);
+      console.log('');
+      console.log('Which terminal app(s) should be exposed to Dialout remote (auto-wrap into tmux)?');
+      console.log('All other terminals stay native (full OS text selection + scrolling).');
+
+      if (process.stdin.isTTY) {
+        const items = ordered.map((t) => ({
+          label: t.name,
+          token: t.token,
+          hint: [t.installed ? '' : 'not installed', t.current ? 'this terminal' : ''].filter(Boolean).join(', ') || undefined,
+          checked: prev.has(t.token),
+        }));
+        console.log('');
+        const picked = await promptChecklist(items);
+        if (picked === null) {
+          console.log('Cancelled — no changes made.');
+          return;
+        }
+        selected = sanitizeTokens(picked);
+      } else {
+        // Non-TTY (piped) fallback: numbered toggle prompt.
+        const ticks = ordered.map((t) => prev.has(t.token));
+        ordered.forEach((t, i) => {
+          const box = ticks[i] ? '[x]' : '[ ]';
+          const tags = [t.installed ? '' : 'not installed', t.current ? 'this terminal' : ''].filter(Boolean).join(', ');
+          console.log(`  ${i + 1}) ${box} ${t.name}${tags ? `  (${tags})` : ''}`);
+        });
+        const rl = createRL();
+        const ans = (await ask(rl, '\nToggle by number (space/comma separated), Enter to confirm: ')).trim();
+        rl.close();
+        for (const tok of ans.split(/[, ]+/).filter(Boolean)) {
+          const idx = parseInt(tok, 10) - 1;
+          if (idx >= 0 && idx < ticks.length) ticks[idx] = !ticks[idx];
+        }
+        selected = sanitizeTokens(ordered.filter((_, i) => ticks[i]).map((t) => t.token));
+      }
+    }
+
+    // Guard rail against the reported silent no-op: warn (loudly, not
+    // silently) when a selected token cannot possibly match on this platform
+    // — e.g. picking "Apple_Terminal" on linux, or a Linux-only marker token
+    // on darwin. The rc block is still written below (dotfiles may be synced
+    // across machines); this only changes what's printed and the exit code.
+    const badTokens = unmatchableTokens(selected, process.platform);
+    for (const tok of badTokens) {
+      console.log(`\x1b[33mWarning: "${tok}" cannot match on ${process.platform} — that terminal does not run here.\x1b[0m`);
+    }
+    if (selected.length > 0 && badTokens.length === selected.length) {
+      console.log('\x1b[33mNone of the selected terminal(s) can ever match on this machine — cowork will never activate.\x1b[0m');
+      process.exitCode = 1;
+    }
+
+    // Adopt existing tmux sessions (unchanged behavior).
+    const all = await listSessions();
+    const orphans = all.filter((s) => s.origin !== 'browser' && !s.folder);
+    if (orphans.length > 0 && opts.adopt !== false) {
+      console.log('');
+      console.log(`Found ${orphans.length} existing tmux session(s) not managed by Dialout:`);
+      orphans.forEach((s, i) => console.log(`  ${i + 1}) ${s.name}  (${s.termProgram})`));
+      let pick: string;
+      if (opts.adoptAll) {
+        pick = 'a';
+      } else {
+        const rl = createRL();
+        pick = (await ask(rl, 'Bind which to Dialout? [1,2,… / a=all / n=none]: ')).trim().toLowerCase();
+        rl.close();
+      }
+      let chosen: typeof orphans = [];
+      if (pick === 'a') chosen = orphans;
+      else if (pick && pick !== 'n') {
+        const idx = pick.split(/[, ]+/).map((x) => parseInt(x, 10) - 1).filter((n) => n >= 0 && n < orphans.length);
+        chosen = idx.map((i) => orphans[i]);
+      }
+      for (const s of chosen) {
+        const tmux = (args: string[]) => { try { execFileSync('tmux', args, { timeout: 5000, stdio: 'pipe' }); } catch {} };
+        let cwd = '';
+        try {
+          cwd = execFileSync('tmux', ['display-message', '-p', '-t', s.name, '#{pane_current_path}'],
+            { timeout: 5000, stdio: 'pipe' }).toString().trim();
+        } catch {}
+        const base = cwd.split('/').filter(Boolean).pop() || '';
+        tmux(['set-option', '-t', s.name, '@devdash_origin', 'native']);
+        if (s.termProgram === 'unknown') tmux(['set-option', '-t', s.name, '@term_program', 'unknown']);
+        if (base) tmux(['set-option', '-t', s.name, '@devdash_folder', base]);
+        if (cwd) tmux(['set-option', '-t', s.name, '@devdash_folder_path', cwd]);
+      }
+      if (chosen.length > 0) console.log(`\x1b[32m✓ Adopted ${chosen.length} session(s)\x1b[0m (live after the agent's next poll)`);
+    }
+
+    // Persist the allowlist and write / remove the block.
+    config.coworkTerminals = selected;
+    if (selected.length === 0) {
+      for (const rc of rcFiles) {
+        if (!fs.existsSync(rc)) continue;
+        fs.writeFileSync(rc, removeCoworkBlock(fs.readFileSync(rc, 'utf-8')));
+        console.log(`  removed wrapper from ${rc}`);
+      }
+      config.cowork = false;
+      saveConfig(config);
+      console.log('');
+      console.log('No remote terminal selected — all terminals are native (OS selection + scrolling).');
+      return;
+    }
+
+    const existing = rcFiles.filter((f) => fs.existsSync(f));
+    const targets = existing.length > 0
+      ? existing
+      : [(process.env.SHELL || '').includes('bash') ? rcFiles[1] : rcFiles[0]];
+    for (const rc of targets) {
+      const result = installCoworkBlock(rc, selected);
+      applySshLocalNetworkWorkaround();
+      console.log(`  ${result}: wrapper in ${rc}`);
+    }
+    config.cowork = true;
+    saveConfig(config);
+    console.log('');
+    console.log(`\x1b[32mCowork enabled.\x1b[0m Remote app(s): ${selected.join(', ')}`);
+    console.log('These auto-wrap into tmux and appear in Dialout → Terminals.');
+    console.log('Every other terminal stays native (OS text selection + native scrolling).');
+    if (currentTerminalToken() === '') {
+      console.log('\x1b[33mNote:\x1b[0m setup ran inside tmux, so "this terminal" could not be pre-ticked.');
+      console.log('Re-run from a native terminal window if the checklist missed your app.');
+    }
+    console.log('Restart the agent to start reporting sessions: devdash-agent restart');
+  });
+
+// --- update ---
+program
+  .command('update')
+  .description('Update Dialout to the latest version')
+  .addHelpText('after', `
+  Checks the IndiaNIC registry for a newer version and installs it.
+  If running as a service, you'll be prompted to restart it.
+
+  Examples:
+    $ dialout update             # update to latest
+    $ dialout --version          # check current version`)
+  .action(async () => {
+    await performUpdate();
+  });
+
+// --- config ---
+const configCmd = program
+  .command('config')
+  .description('View or modify agent configuration')
+  .addHelpText('after', `
+  Subcommands:
+    devdash-agent config show                      Print current config (API key masked)
+    devdash-agent config path                      Show config file location
+    devdash-agent config reset                     Reset to defaults (keeps API key + server)
+    devdash-agent config set <key> <value>         Set a config value
+
+  Config keys:
+    serverUrl         WebSocket URL (e.g., wss://devdash.server.com/ws)
+    apiKey            Machine API key (e.g., mch_xxxx)
+    heartbeatInterval Keep-alive interval in ms (default: 30000)
+    cronInterval      Watchdog check interval in minutes (default: 5)
+    scanPorts         Comma-separated ports (e.g., 3000,8080,5173)
+    scanRange         Port range (e.g., 3000-9000)
+
+  Examples:
+    $ dialout config show
+    $ dialout config set scanPorts 3000,4200,8080
+    $ dialout config reset`);
+
+configCmd
+  .command('show')
+  .description('Print current configuration (API key masked)')
+  .action(() => {
+    const config = loadConfig();
+    const display = { ...config, apiKey: config.apiKey ? '****' + config.apiKey.slice(-4) : '' };
+    console.log(JSON.stringify(display, null, 2));
+  });
+
+configCmd
+  .command('path')
+  .description('Show config file location')
+  .action(() => {
+    console.log(getConfigPath());
+  });
+
+configCmd
+  .command('reset')
+  .description('Reset config to defaults (keeps API key and server URL)')
+  .addHelpText('after', `
+  Resets all configuration values to defaults while preserving:
+    - serverUrl  (your server connection)
+    - apiKey     (your machine authentication)
+
+  This is useful if you've changed scan ports, intervals, etc. and want to start fresh.
+
+  Examples:
+    $ dialout config reset       # reset to defaults
+    $ dialout config show        # verify the result`)
+  .action(() => {
+    const config = loadConfig();
+    const { serverUrl, apiKey } = config;
+    const defaults = {
+      serverUrl,
+      apiKey,
+      scanPorts: [3000, 3001, 4200, 5173, 5174, 8000, 8080, 8081, 9000],
+      scanRange: { from: 3000, to: 9000 },
+      heartbeatInterval: 30000,
+      cronInterval: 5,
+    } as AgentConfig;
+    saveConfig(defaults);
+    console.log('Config reset to defaults (serverUrl and apiKey preserved).');
+    console.log(`Config file: ${getConfigPath()}`);
+  });
+
+configCmd
+  .command('set <key> <value>')
+  .description('Set a configuration value')
+  .addHelpText('after', `
+  Available keys:
+    serverUrl         WebSocket URL (e.g., wss://devdash.server.com/ws)
+    apiKey            Machine API key (e.g., mch_xxxx)
+    heartbeatInterval Keep-alive interval in ms (default: 30000)
+    cronInterval      Watchdog check interval in minutes (default: 5)
+    scanPorts         Comma-separated ports (e.g., 3000,8080,5173)
+    scanRange         Port range (e.g., 3000-9000)
+
+  Examples:
+    $ dialout config set serverUrl wss://new-server.com/ws
+    $ dialout config set cronInterval 3
+    $ dialout config set scanPorts 3000,4200,8080
+    $ dialout config set scanRange 3000-9000
+    $ dialout config set heartbeatInterval 60000`)
+  .action((key: string, value: string) => {
+    const config = loadConfig() as any;
+    if (!(key in config)) {
+      console.error(`Unknown config key: ${key}`);
+      console.error(`Valid keys: ${Object.keys(config).join(', ')}`);
+      process.exit(1);
+    }
+
+    if (key === 'heartbeatInterval' || key === 'cronInterval') {
+      config[key] = parseInt(value, 10);
+    } else if (key === 'scanPorts') {
+      config[key] = value.split(',').map((p: string) => parseInt(p.trim(), 10));
+    } else if (key === 'scanRange') {
+      const [from, to] = value.split('-').map((p: string) => parseInt(p.trim(), 10));
+      config[key] = { from, to };
+    } else {
+      config[key] = value;
+    }
+
+    // Keep the active profile in sync when connection values change
+    if ((key === 'serverUrl' || key === 'apiKey') && config.activeProfile && config.profiles?.[config.activeProfile]) {
+      config.profiles[config.activeProfile][key] = config[key];
+    }
+
+    saveConfig(config);
+    console.log(`Set ${key} = ${JSON.stringify(config[key])}`);
+  });
+
+program.parse();

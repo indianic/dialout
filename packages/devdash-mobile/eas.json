@@ -1,0 +1,42 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "https://www.dialout.dev",
+        "EXPO_PUBLIC_WS_URL": "wss://www.dialout.dev/ws"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "APP_VARIANT": "preview",
+        "EXPO_PUBLIC_API_URL": "https://www.dialout.dev",
+        "EXPO_PUBLIC_WS_URL": "wss://www.dialout.dev/ws"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_API_URL": "https://www.dialout.dev",
+        "EXPO_PUBLIC_WS_URL": "wss://www.dialout.dev/ws"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

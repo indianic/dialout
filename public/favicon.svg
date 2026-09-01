@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Dialout">
+  <!-- Dialout mark. Chevron = the connection leaving the machine; dot = the
+       machine. Built on the 24-unit grid from docs/brand/brand-guidelines.md
+       (path M4,17 L12,7 L20,17, stroke 3, dot r1.75 at 12,20.5) and placed in
+       this 32 tile by a single transform so the geometry stays editable in the
+       units the guidelines specify.
+
+       One flat colour, no gradient. The purple->magenta gradient this replaces
+       appeared nowhere else in the product and contradicted the no-gradient
+       rule in globals.css. -->
+  <rect width="32" height="32" rx="8" fill="#0c0e13"/>
+  <g transform="translate(2.11 -0.07) scale(1.158)"
+     fill="none" stroke="#ffffff" stroke-width="3"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 4 17 L 12 7 L 20 17"/>
+  </g>
+  <circle cx="16" cy="23.67" r="2.03" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,37 @@
+{
+  "name": "@dialout/shared",
+  "version": "1.0.0",
+  "description": "Types and constants shared by the Dialout server, agent and mobile app.",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.ts",
+      "require": "./dist/index.js",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
+  },
+  "license": "MIT",
+  "homepage": "https://www.dialout.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indianic/dialout.git",
+    "directory": "packages/devdash-shared"
+  }
+}
