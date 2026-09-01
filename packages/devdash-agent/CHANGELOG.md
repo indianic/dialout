@@ -370,7 +370,7 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.5] - 2026-06-29
 
-- Service-aware status, install-service --system boot mode, npmnic publishing, migration docs
+- Service-aware status, install-service --system boot mode, publishing pipeline, migration docs
 
 ## [1.0.4] - 2026-06-29
 

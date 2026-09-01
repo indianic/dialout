@@ -394,7 +394,7 @@ Package published to `https://registry.npmjs.org` as `dialout`.
 
 ### Release Script
 
-Historical note: this plan originally specified a `release-indianic` wrapper script for a private registry. That was dropped at the open-source launch — the agent is published to the public registry with `npm publish` and no wrapper. The block below is kept only as a record of the original plan:
+Historical note: this plan originally specified a release wrapper script for a private registry. That was dropped at the open-source launch — the agent is published to the public registry with `npm publish` and no wrapper. The block below is kept only as a record of the original plan:
 - Auto commits pending changes
 - Bumps version (patch/minor/major)
 - Builds TypeScript
