@@ -788,11 +788,24 @@ function handleDaemonMessage(machineId: number, msg: any): void {
       break;
     }
 
+    // One slice of a large response body. These arrive before the
+    // `http_response` that closes the request out, and are indexed rather than
+    // appended so that out-of-order delivery cannot scramble the asset.
+    case 'http_response_chunk': {
+      if (!pendingRequests.has(msg.requestId)) break;   // timed out already
+      let parts = tunnelChunkBuffers.get(msg.requestId);
+      if (!parts) { parts = []; tunnelChunkBuffers.set(msg.requestId, parts); }
+      parts[msg.index] = msg.data || '';
+      break;
+    }
+
     case 'http_response': {
       const resolver = pendingRequests.get(msg.requestId);
       if (resolver) {
         resolver(msg);
         pendingRequests.delete(msg.requestId);
+      } else {
+        tunnelChunkBuffers.delete(msg.requestId);
       }
       break;
     }
@@ -1313,6 +1326,31 @@ code{background:#262626;padding:2px 8px;border-radius:4px;font-size:13px;color:#
 const TUNNEL_TIMEOUT_MS = 90_000;
 
 /**
+ * Above this many base64 characters, the agent splits a response body across
+ * several WebSocket frames instead of sending one.
+ *
+ * A 7.6 MB dev-server chunk base64-encodes to ~10.1 MB, and a frame that size
+ * did not survive the hop from the agent through the reverse proxy to here —
+ * the request simply never completed and timed out. Smaller assets on the same
+ * connection were fine, which is what made it look like a routing bug: the page
+ * loaded, its small chunks loaded, and one big one silently did not.
+ *
+ * 256 KB per frame is comfortably inside every buffer in the chain and costs
+ * one extra message per quarter-megabyte.
+ */
+const TUNNEL_CHUNK_THRESHOLD = 256 * 1024;
+
+/**
+ * Bodies still being reassembled, keyed by requestId.
+ *
+ * Entries are removed when the final `http_response` arrives, when the request
+ * times out, and when the agent disconnects — a half-delivered body whose
+ * sender has gone is never going to complete, and left alone these would be a
+ * slow leak of multi-megabyte strings.
+ */
+const tunnelChunkBuffers = new Map<string, string[]>();
+
+/**
  * Why the tunnel could not answer. `null` used to mean both "no agent" and
  * "the agent never replied", and the caller rendered the same page for each —
  * so a slow dev server produced "Machine offline. Start the agent with:
@@ -1337,15 +1375,38 @@ async function requestHttpTunnel(
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(requestId);
+      tunnelChunkBuffers.delete(requestId);
       resolve('timeout');
     }, TUNNEL_TIMEOUT_MS);
 
     pendingRequests.set(requestId, (result) => {
       clearTimeout(timeout);
+
+      let bodyB64: string = result.body || '';
+      if (result.chunked) {
+        const parts = tunnelChunkBuffers.get(requestId) || [];
+        tunnelChunkBuffers.delete(requestId);
+        // A missing frame would silently truncate the asset, which is worse
+        // than failing: a half-delivered stylesheet or script is a bug the
+        // reader chases in their own code. Refuse it instead.
+        if (parts.length !== result.totalChunks || parts.some((p) => p === undefined)) {
+          resolve({
+            status: 502,
+            headers: { 'content-type': 'text/plain' },
+            body: Buffer.from(
+              `Tunnel error: response was split into ${result.totalChunks} parts but `
+              + `${parts.filter((x) => x !== undefined).length} arrived.`,
+            ).toString('base64'),
+          });
+          return;
+        }
+        bodyB64 = parts.join('');
+      }
+
       resolve({
         status: result.status || 502,
         headers: result.headers || {},
-        body: result.body || '',
+        body: bodyB64,
       });
     });
 
@@ -1358,6 +1419,10 @@ async function requestHttpTunnel(
       path,
       headers,
       body: body || null,
+      // Tells a new-enough agent it may split a large body across frames. An
+      // older agent ignores this and sends one frame, which is the behaviour it
+      // has today — so no version of the agent gets worse.
+      chunkThreshold: TUNNEL_CHUNK_THRESHOLD,
     }));
   });
 }
@@ -1701,6 +1766,47 @@ server.on('request', async (req, res) => {
         // "stylesheets and images missing" case.
         const alreadyTunneled = (p: string) => p.startsWith(tunnelBase + '/');
 
+        // Absolute URLs pointing back at the tunnelled origin.
+        //
+        // Plenty of stacks emit fully-qualified asset URLs rather than paths —
+        // Laravel builds them from APP_URL, Vite from its dev-server origin —
+        // so the page arrives referencing http://myapp.localhost/build/app.js.
+        // A path rewrite never sees those, the browser requests them directly,
+        // and the request either cannot reach the machine at all or is refused
+        // as cross-origin. The console calls it a CORS error, which sends
+        // people looking for a header to add; the actual problem is that the
+        // request was never supposed to leave the tunnel.
+        //
+        // Rewriting them to the tunnel makes it same-origin, so there is no
+        // CORS decision left to make. Only exact origins we are proxying are
+        // touched — this never rewrites a genuine third-party URL.
+        const originsToRewrite: string[] = [];
+        if (tunnelOpts.baseUrl) {
+          try {
+            const u = new URL(tunnelOpts.baseUrl);
+            originsToRewrite.push(u.origin);
+            // Same host over the other scheme, and with an explicit :80 / :443
+            // that a framework may have written out in full.
+            originsToRewrite.push(`${u.protocol === 'https:' ? 'http:' : 'https:'}//${u.host}`);
+            if (!u.port) {
+              originsToRewrite.push(`http://${u.hostname}:80`, `https://${u.hostname}:443`);
+            }
+          } catch { /* unparseable base URL — nothing to match on */ }
+        } else if (tunnelOpts.port) {
+          for (const host of ['localhost', '127.0.0.1', '0.0.0.0', '[::1]']) {
+            originsToRewrite.push(`http://${host}:${tunnelOpts.port}`, `https://${host}:${tunnelOpts.port}`);
+          }
+        }
+
+        for (const origin of originsToRewrite) {
+          if (!origin) continue;
+          // Longest-first is not needed here because origins are exact and
+          // non-overlapping, but the trailing boundary is: without it,
+          // http://app.localhost would also match http://app.localhost.evil.com.
+          const escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          text = text.replace(new RegExp(`${escaped}(?=[/"'\\s)\\\\]|$)`, 'g'), tunnelBase);
+        }
+
         if (contentType.includes('text/html')) {
           // HTML is rewritten by attribute rather than by blanket search. The
           // set below is every attribute that takes a URL and can be
@@ -1757,7 +1863,14 @@ server.on('request', async (req, res) => {
           // server's root. Patching the property setters is what catches those,
           // and it is the half that was missing.
           const tunnelScript = `<script>(function(){var B=${JSON.stringify(tunnelBase)};`
-            + `function fix(u){if(typeof u!=="string")return u;if(u.charAt(0)!=="/"||u.charAt(1)==="/")return u;if(u.indexOf(B+"/")===0)return u;return B+u}`
+            // The same origins the text pass rewrote, so a URL the app builds
+            // at runtime — `${window.location.origin}/api/x`, an APP_URL read
+            // from a data attribute — is folded back through the tunnel too,
+            // rather than becoming a cross-origin request the browser refuses.
+            + `var O=${JSON.stringify(originsToRewrite)};`
+            + `function fix(u){if(typeof u!=="string"||!u)return u;`
+            + `for(var i=0;i<O.length;i++){if(O[i]&&u.indexOf(O[i])===0){var r=u.slice(O[i].length);if(r===""||r.charAt(0)==="/"||r.charAt(0)==="?"||r.charAt(0)==="#")return B+r}}`
+            + `if(u.charAt(0)!=="/"||u.charAt(1)==="/")return u;if(u.indexOf(B+"/")===0||u===B)return u;return B+u}`
             // fetch, in both its string and Request forms.
             + `var F=window.fetch;window.fetch=function(u,o){if(typeof u==="string")u=fix(u);else if(u instanceof Request){var nu=u.url;var p=nu.replace(location.origin,"");if(p!==nu||nu.charAt(0)==="/"){var f=fix(p);if(f!==p)u=new Request(f,u)}}return F.call(this,u,o)};`
             + `var X=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=fix(u);return X.apply(this,arguments)};`

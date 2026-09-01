@@ -72,7 +72,7 @@ async function pollTmuxSessions() {
                 reportedSinceConnect = true;
                 const uid = typeof process.getuid === 'function' ? process.getuid() : '?';
                 const locale = process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '(unset)';
-                console.log(`[devdash-agent] reporting ${enriched.length} tmux session(s)`
+                console.log(`[dialout] reporting ${enriched.length} tmux session(s)`
                     + (enriched.length === 0
                         ? ` — none visible. uid=${uid}, locale=${locale}.`
                             + ' If you do have tmux sessions, compare that uid with `id -u`'
@@ -83,7 +83,7 @@ async function pollTmuxSessions() {
         }
     }
     catch (err) {
-        console.error('[devdash-agent] tmux poll failed:', err.message);
+        console.error('[dialout] tmux poll failed:', err.message);
     }
 }
 function startTmuxPolling() {
@@ -118,7 +118,7 @@ async function pollAiSessions() {
         ws.send(JSON.stringify({ type: 'ai_session_list', sessions }));
     }
     catch (err) {
-        console.error('[devdash-agent] ai session poll failed:', err.message);
+        console.error('[dialout] ai session poll failed:', err.message);
     }
 }
 function startAiPolling() {
@@ -143,7 +143,7 @@ function connect(config, onConnected) {
         headers: { 'X-API-Key': config.apiKey },
     });
     ws.on('open', () => {
-        console.log('[devdash-agent] Connected to server');
+        console.log('[dialout] Connected to server');
         reconnectAttempt = 0; // a good connection resets the backoff
         (0, pty_manager_1.setActiveSocket)(ws);
         // A dead socket may never emit 'close' on its own — terminate() forces it,
@@ -172,11 +172,11 @@ function connect(config, onConnected) {
             handleMessage(msg, config);
         }
         catch (err) {
-            console.error('[devdash-agent] Invalid message:', err);
+            console.error('[dialout] Invalid message:', err);
         }
     });
     ws.on('close', (code) => {
-        console.log(`[devdash-agent] Disconnected (code: ${code})`);
+        console.log(`[dialout] Disconnected (code: ${code})`);
         (0, heartbeat_1.stopHeartbeat)();
         stopTmuxPolling();
         stopAiPolling();
@@ -186,7 +186,7 @@ function connect(config, onConnected) {
         scheduleReconnect(config, onConnected);
     });
     ws.on('error', (err) => {
-        console.error('[devdash-agent] WebSocket error:', err.message);
+        console.error('[dialout] WebSocket error:', err.message);
     });
 }
 function disconnect() {
@@ -213,7 +213,7 @@ function scheduleReconnect(config, onConnected) {
     if (reconnectTimer)
         return;
     const delay = reconnectDelay(++reconnectAttempt);
-    console.log(`[devdash-agent] Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${reconnectAttempt})...`);
+    console.log(`[dialout] Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${reconnectAttempt})...`);
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect(config, onConnected);
@@ -224,7 +224,7 @@ async function handleMessage(msg, config) {
         return;
     switch (msg.type) {
         case 'auth_ok':
-            console.log(`[devdash-agent] Authenticated as machine ${msg.machineId}`);
+            console.log(`[dialout] Authenticated as machine ${msg.machineId}`);
             break;
         case 'pong':
             // Server acknowledged heartbeat — proves the socket is still two-way.
@@ -379,7 +379,7 @@ async function handleMessage(msg, config) {
             // real error so the UI can tell "killed" from "failed".
             const killed = await (0, tmux_manager_1.killTmuxSession)(msg.name);
             if (!killed.ok) {
-                console.error(`[devdash-agent] kill_tmux ${msg.name} failed: ${killed.error}`);
+                console.error(`[dialout] kill_tmux ${msg.name} failed: ${killed.error}`);
             }
             ws.send(JSON.stringify({
                 type: 'kill_tmux_result',
@@ -406,13 +406,53 @@ async function handleMessage(msg, config) {
                 const bodyBuf = Buffer.from(await resp.arrayBuffer());
                 const respHeaders = {};
                 resp.headers.forEach((val, key) => { respHeaders[key] = val; });
-                ws.send(JSON.stringify({
-                    type: 'http_response',
-                    requestId: msg.requestId,
-                    status: resp.status,
-                    headers: respHeaders,
-                    body: bodyBuf.toString('base64'),
-                }));
+                const b64 = bodyBuf.toString('base64');
+                // Split a large body across several frames.
+                //
+                // A single frame carrying ~10 MB of base64 — a 7.6 MB dev-server chunk,
+                // say — did not survive the hop to the server: the request never
+                // completed and eventually timed out, while every smaller asset on the
+                // same socket went through. That is why one big script could 404 on a
+                // page whose other chunks all loaded.
+                //
+                // The threshold comes from the server on each request. An older server
+                // does not send it, `chunkThreshold` is undefined, and this whole branch
+                // is skipped — so the agent keeps behaving exactly as it does today
+                // rather than sending frames the other end cannot reassemble.
+                const threshold = typeof msg.chunkThreshold === 'number' && msg.chunkThreshold > 0
+                    ? msg.chunkThreshold
+                    : undefined;
+                if (threshold && b64.length > threshold) {
+                    const total = Math.ceil(b64.length / threshold);
+                    for (let i = 0; i < total; i++) {
+                        ws.send(JSON.stringify({
+                            type: 'http_response_chunk',
+                            requestId: msg.requestId,
+                            index: i,
+                            data: b64.slice(i * threshold, (i + 1) * threshold),
+                        }));
+                    }
+                    // The metadata frame goes last and carries no body: it is what tells
+                    // the server the parts are all sent and how many to expect, so a
+                    // short delivery is detected rather than silently truncating.
+                    ws.send(JSON.stringify({
+                        type: 'http_response',
+                        requestId: msg.requestId,
+                        status: resp.status,
+                        headers: respHeaders,
+                        chunked: true,
+                        totalChunks: total,
+                    }));
+                }
+                else {
+                    ws.send(JSON.stringify({
+                        type: 'http_response',
+                        requestId: msg.requestId,
+                        status: resp.status,
+                        headers: respHeaders,
+                        body: b64,
+                    }));
+                }
             }
             catch (err) {
                 ws.send(JSON.stringify({
@@ -426,7 +466,7 @@ async function handleMessage(msg, config) {
             break;
         }
         default:
-            console.warn('[devdash-agent] Unknown message type:', msg.type);
+            console.warn('[dialout] Unknown message type:', msg.type);
     }
 }
 //# sourceMappingURL=websocket.js.map
