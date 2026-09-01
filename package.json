@@ -36,7 +36,7 @@
     "pm2:start": "bash scripts/start.sh start",
     "pm2:stop": "bash scripts/start.sh stop",
     "pm2:restart": "bash scripts/start.sh restart",
-    "pm2:logs": "pm2 logs devdash-local",
+    "pm2:logs": "pm2 logs dialout-local",
     "ws:start": "tsx src/ws-server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",

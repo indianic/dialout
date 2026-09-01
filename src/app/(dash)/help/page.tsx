@@ -95,7 +95,7 @@ export default function HelpPage() {
           </p>
           <Steps
             items={[
-              'Go to Machines and press Add Machine. Give it a name you will recognise, like "MacBook Pro" or "server8".',
+              'Go to Machines and press Add Machine. Give it a name you will recognise, like "MacBook Pro" or "build-box".',
               'Generate an API key for it. This is the password the agent uses to prove it is that machine.',
               'Install the agent on the machine itself and paste the key in. The full walkthrough is on the agent page.',
               'The dot next to the machine turns green once its agent connects.',
@@ -169,7 +169,7 @@ export default function HelpPage() {
           </Note>
           <p>
             For Local sessions to appear here at all, run{' '}
-            <code>devdash-agent setup-cowork</code> once on that machine. It is explained on the
+            <code>dialout setup-cowork</code> once on that machine. It is explained on the
             agent page.
           </p>
         </HelpSection>

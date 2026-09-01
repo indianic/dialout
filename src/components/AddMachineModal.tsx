@@ -67,7 +67,7 @@ export default function AddMachineModal({ open, existingNames, onClose, onAdd }:
             className="inp"
             value={name}
             maxLength={60}
-            placeholder="MacBook Pro, Office Desktop, server8…"
+            placeholder="MacBook Pro, Office Desktop, build-box…"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           />
@@ -79,7 +79,7 @@ export default function AddMachineModal({ open, existingNames, onClose, onAdd }:
 
           <p className="mt-3" style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.6 }}>
             After adding it, generate an API key for this machine and run{' '}
-            <code style={{ background: 'var(--glass)', padding: '1px 5px', borderRadius: 4 }}>devdash-agent init</code>{' '}
+            <code style={{ background: 'var(--glass)', padding: '1px 5px', borderRadius: 4 }}>dialout init</code>{' '}
             on the machine itself to connect it.
           </p>
 

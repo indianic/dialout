@@ -1,9 +1,9 @@
-// Local default: port 50051, name "devdash-local".
+// Local default: port 50051, name "dialout-local".
 // Production deploys override APP_NAME via GitLab CI/CD variables —
 // see .gitlab-ci.yml. Port stays 50051 in both environments.
 const PORT = process.env.PORT || 50051;
 const WS_PORT = process.env.WS_PORT || 50052;
-const APP_NAME = process.env.APP_NAME || 'devdash-local';
+const APP_NAME = process.env.APP_NAME || 'dialout-local';
 
 module.exports = {
   apps: [
