@@ -378,7 +378,7 @@ Expected: `# fail 0` (40 tests); `web tsc exit=0`; clean tree.
 
 - [ ] **Step 2: Release (bump → build → changelog → commit → tag → push → publish)**
 
-The sanctioned path is `npmnic` (private registry `https://registry.npmjs.org`), which requires a prior `npmnic login`. Run:
+Publish to the public registry with `npm publish`, which requires a prior `npm login`. Run:
 ```bash
 cd packages/devdash-agent && npm run release:minor
 ```

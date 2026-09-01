@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="88" height="88" role="img" aria-label="Dialout">
+  <!-- Dialout mark, README size. Chevron = the connection leaving the machine;
+       dot = the machine. Geometry is identical to public/favicon.svg — the
+       24-unit construction from docs/brand/brand-guidelines.md placed in a 32
+       tile by one transform. One flat colour, no gradient. The terminal ground
+       is used rather than a transparent background so the mark reads the same
+       on GitHub's light and dark themes without a <picture> swap. -->
+  <rect width="32" height="32" rx="8" fill="#0c0e13"/>
+  <g transform="translate(2.11 -0.07) scale(1.158)"
+     fill="none" stroke="#ffffff" stroke-width="3"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 4 17 L 12 7 L 20 17"/>
+  </g>
+  <circle cx="16" cy="23.67" r="2.03" fill="#ffffff"/>
+</svg>

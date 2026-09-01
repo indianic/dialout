@@ -970,7 +970,7 @@ Run from `packages/devdash-agent`:
 ```bash
 cd packages/devdash-agent && npm run build && npm publish
 ```
-Expected: `devdash-agent@2.1.0` published. (If the repo's `scripts/release-indianic` is the sanctioned publish path, use `npm run release:minor` instead — confirm with the user which publish path this project uses before running.)
+Expected: the agent published at the bumped version. Publishing is `npm run build` then `npm publish` to the public registry — confirm the version bump with the user before running.
 
 Verify: `npm view devdash-agent version`
 Expected: `2.1.0`.

@@ -21,9 +21,9 @@ test('parseSessionLine parses a full list-sessions line', () => {
 test('parseSessionLine reports the LIVE pane path, deriving folder from it', () => {
   // The whole point: @devdash_folder_path is frozen at session creation, so a
   // `cd` makes it lie. pane_current_path always reflects where the user is now.
-  const s = parseSessionLine(line('s', '1', '0', '2', '80', '24', '/Users/indianic/www/products/reimage'));
-  assert.strictEqual(s.folderPath, '/Users/indianic/www/products/reimage');
-  assert.strictEqual(s.folder, 'reimage');
+  const s = parseSessionLine(line('s', '1', '0', '2', '80', '24', '/Users/dev/www/products/example'));
+  assert.strictEqual(s.folderPath, '/Users/dev/www/products/example');
+  assert.strictEqual(s.folder, 'example');
 });
 
 test('parseSessionLine tolerates session names containing dashes and dots', () => {

@@ -1,165 +1,261 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/indianic/dialout/main/docs/assets/logo.svg" width="88" height="88" alt="Dialout">
+
 # dialout
 
-Remote daemon for [DevDash](https://devdash.indianic.com) — connects developer machines to the DevDash server for port scanning, browser-based terminal sessions, and filesystem browsing.
+**Your machines, one room. The agent dials out, so nothing has to dial in.**
 
-> **Package rename:** this agent is published as **`dialout`**. Earlier builds used the name `dialout` — if you have that installed, see [Migrating from the old package](#migrating-from-the-old-package-indianicdevdash) below.
+[![npm](https://img.shields.io/npm/v/dialout?style=flat-square&color=1a56db)](https://www.npmjs.com/package/dialout)
+[![License](https://img.shields.io/badge/license-MIT-1a56db?style=flat-square)](https://github.com/indianic/dialout/blob/main/LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A518-1a56db?style=flat-square)](https://nodejs.org)
+[![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux-0c0e13?style=flat-square)](#requirements)
 
-## What it does
+**[dialout.dev](https://www.dialout.dev)** · [GitHub](https://github.com/indianic/dialout) · [Get started](#getting-started) · [CLI reference](#cli-reference) · [Troubleshooting](#troubleshooting)
 
-- **Port scanning** — scans local ports on demand, reports results to the server
-- **Terminal sessions** — spawns PTY shells, streams I/O to the browser via WebSocket
-- **Filesystem browsing** — lists directories for the path picker in the DevDash UI
-- **Heartbeat** — maintains persistent connection with 30s keep-alive
+</div>
+
+---
+
+**This is the agent for [Dialout](https://www.dialout.dev), a free, open-source,
+self-hosted remote development dashboard.** Install it on any computer you code
+on — your office desktop, your home machine, a build box — and that machine
+appears in your Dialout dashboard, reachable from any browser or your phone.
+
+The agent connects **outbound** to your server and holds the socket open. There
+is no inbound port to open, no VPN to join, and no port forwarding to configure.
+If the machine can reach the internet, you can reach the machine.
+
+```bash
+npm install -g dialout
+dialout init
+dialout install-service
+```
+
+---
+
+## The problem it solves
+
+You are away from your desk and you need to know what your machine is doing.
+Today that means being at the machine, or reassembling the answer by hand:
+
+```console
+$ lsof -i :3000                 # which project is this, again?
+node  41287  you  26u  IPv6  TCP *:3000 (LISTEN)
+
+$ ssh build-box                 # the other four ports are on a different box
+you@build-box:~$ pm2 list
+you@build-box:~$ cat apps/checkout/.env | grep STRIPE_
+
+$ tmux ls                       # and the migration I started on Friday?
+0: 1 windows  1: 1 windows      # no idea which one
+```
+
+Four terminals, three machines, and the only index is your memory. Run six
+projects for a year and *"which port was the admin panel on?"* becomes a
+genuinely hard question that nothing in your toolchain is keeping the answer to.
+Meanwhile an AI coding agent is running a 40-minute task on that machine and
+will sit and wait for an answer the moment you walk away.
+
+With the agent installed, all of that is one URL — from a phone if that is what
+you have on you:
+
+- **Search a port, keep the answer.** Scan a range, find what is listening, save
+  it as a project. `:3000` becomes *Checkout, on the office Mac, running.*
+- **Open a real terminal, from anywhere** — straight into the project folder.
+- **Answer your AI agent from your phone.** Claude Code, Codex and Grok sessions
+  rendered as chat, with a push when one is waiting on you.
+- **Share a project with a teammate**, with notes and todos attached to the
+  project instead of a chat thread.
+- **Put `localhost` on a public URL** for a demo, a webhook, or a test device.
+
+<img src="https://raw.githubusercontent.com/indianic/dialout/main/docs/assets/screenshots/hero.png" alt="The Dialout dashboard: projects across every machine, with live port status">
+
+## What the agent does
+
+- **Port scanning** — scans local ports on demand and reports what is listening
+- **Terminal sessions** — tmux-backed PTYs streamed to the browser over WebSocket
+- **AI session tailing** — follows the JSONL transcript each AI CLI already
+  writes, so sessions render as chat without ever scraping the terminal UI
+- **Filesystem browsing** — lists directories for the path picker
+- **Process control** — runs the quick-launch commands you saved per project
+- **HTTP tunnel origin** — serves your local dev server through the public URL
+- **Heartbeat** — a persistent connection with a 30 s keep-alive
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js 18 or newer
 - macOS or Linux
-- A running DevDash server with WebSocket endpoint
+- A running [Dialout server](https://github.com/indianic/dialout) — it is
+  self-hosted, so this is your server, on your infrastructure
 
-## Installation
+## Getting started
 
-### First-time setup
+Six steps, about ten minutes. You need a Dialout **server** — one, shared by all
+your machines — and this agent on each machine you want to reach.
 
-Configure npm to use the IndiaNIC registry for `@indianic` packages only (other dependencies resolve from public npm):
+### 1 · Get a server
 
-```bash
-npm config set @indianic:registry https://registry.npmjs.org/
-```
+Pick one:
 
-### Install
+- **Self-host it.** Clone [github.com/indianic/dialout](https://github.com/indianic/dialout)
+  and follow the README. One PostgreSQL database and two Node processes; your
+  data stays on your infrastructure. This is the intended path.
+- **Use [dialout.dev](https://www.dialout.dev).** A public instance running the
+  same code, if you want to look around before committing to hosting it. You can
+  repoint the agent at your own server later with one command.
+
+### 2 · Create your account
+
+Open your server and sign up with your email, then complete **two-factor
+enrolment** — scan the QR code with any TOTP app. It is not skippable, and the
+API enforces it independently of the interface, because this is a tool that
+opens terminals on your machines.
+
+### 3 · Add the machine and generate its key
+
+In the dashboard, **Settings → Machines → Add machine**. Give it a name you will
+recognise (`office-mac`, `home-desktop`, `build-box`), then click **Generate
+key**.
+
+You get an `mch_…` key. **Copy it now — it is shown once and stored only as a
+hash.** Generate a new one at any time if you lose it.
+
+### 4 · Install the agent
+
+On the computer you just registered:
 
 ```bash
 npm install -g dialout
 ```
 
-### Update
+### 5 · Point it at your server
 
 ```bash
-npm update -g dialout
+dialout init
 ```
 
-## Quick Start
+It asks for two things:
 
-### 1. Generate an API key
+| Prompt | What to paste |
+| --- | --- |
+| **Server URL** | The WebSocket base — `wss://www.dialout.dev/ws`, or `ws://localhost:50052` for a local server. The agent appends `/daemon` itself. |
+| **API key** | The `mch_…` key from step 3 |
 
-In the DevDash web UI, go to the **MACHINES** tab and click **GENERATE KEY** on your machine. Copy the key — it's shown only once.
+Configuration is written to `~/.dialout/config.json`. `init` then offers to
+install the OS service for you — choose **at boot** if you want the machine
+reachable before anyone logs into the desktop session, which on a machine you
+are trying to reach remotely is almost always what you want.
 
-### 2. Configure the agent
+To run it in the foreground once, before committing to a service:
 
 ```bash
-devdash-agent init
+dialout start            # Ctrl-C to stop
+dialout start --daemon   # or in the background
 ```
 
-You'll be prompted for:
-- **Server URL** — the WebSocket URL of your DevDash server (e.g., `wss://www.dialout.dev/ws`)
-- **API Key** — the key generated in step 1 (e.g., `mch_K27F...`)
+### 6 · Install as a service and verify
 
-Configuration is saved to `~/.devdash-agent/config.json`.
-
-### 3. Start the agent
+If you skipped the offer in `init`, two modes — chosen by whether you need the
+agent running **before** login:
 
 ```bash
-# Foreground (for testing)
-devdash-agent start
-
-# Background (daemon mode)
-devdash-agent start --daemon
-```
-
-### 4. Install as OS service
-
-Two modes — pick based on whether you need the agent running **before** anyone logs in:
-
-```bash
-# Per-user — starts at LOGIN (no sudo)
-devdash-agent install-service
-
-# System-wide — starts at BOOT, before login (requires sudo, see below)
-devdash-agent install-service --system
+dialout install-service            # per-user  — starts at LOGIN (no sudo)
+dialout install-service --system   # system    — starts at BOOT  (needs sudo)
 ```
 
 | Mode | macOS | Linux | Starts |
 |------|-------|-------|--------|
-| default | LaunchAgent `~/Library/LaunchAgents/com.devdash.agent.plist` | systemd user unit `~/.config/systemd/user/devdash-agent.service` | at login |
-| `--system` | LaunchDaemon `/Library/LaunchDaemons/com.devdash.agent.plist` | systemd system unit `/etc/systemd/system/devdash-agent.service` | at boot |
+| default | LaunchAgent `~/Library/LaunchAgents/com.dialout.agent.plist` | systemd user unit `~/.config/systemd/user/dialout.service` | at login |
+| `--system` | LaunchDaemon `/Library/LaunchDaemons/com.dialout.agent.plist` | systemd system unit `/etc/systemd/system/dialout.service` | at boot |
 
-Both modes auto-restart the agent if it crashes or is killed.
+Both modes restart the agent automatically if it crashes or is killed.
 
-#### Running `--system` with sudo
+<details>
+<summary><b>Finishing a <code>--system</code> install by hand</b></summary>
 
-A boot service must be owned by root, so the CLI can't install it directly. When you run `devdash-agent install-service --system` as a normal user, it **stages the unit file** and prints the exact `sudo` commands. Run them to finish:
+<br>
 
-**macOS:**
+A boot service must be owned by root, so a non-root CLI cannot install it
+directly. Run as a normal user, `install-service --system` **stages** the unit
+file and prints the exact commands to finish. Run `sudo dialout install-service
+--system` instead and it does all of this for you.
+
+**macOS**
 
 ```bash
-sudo bash -c 'cp ~/.devdash-agent/com.devdash.agent.plist /Library/LaunchDaemons/com.devdash.agent.plist \
-  && chown root:wheel /Library/LaunchDaemons/com.devdash.agent.plist \
-  && chmod 644 /Library/LaunchDaemons/com.devdash.agent.plist \
-  && launchctl bootstrap system /Library/LaunchDaemons/com.devdash.agent.plist'
+sudo bash -c 'cp ~/.dialout/com.dialout.agent.plist /Library/LaunchDaemons/com.dialout.agent.plist \
+  && chown root:wheel /Library/LaunchDaemons/com.dialout.agent.plist \
+  && chmod 644 /Library/LaunchDaemons/com.dialout.agent.plist \
+  && launchctl bootstrap system /Library/LaunchDaemons/com.dialout.agent.plist'
 ```
 
-> Replace `~` with the absolute path printed by the command (e.g. `/Users/you/.devdash-agent/...`) if you run the line under `sudo` where `~` resolves to root's home.
+Replace `~` with the absolute path the command printed (e.g.
+`/Users/you/.dialout/…`) — under `sudo`, `~` resolves to root's home, not yours.
 
-**Linux:**
+**Linux**
 
 ```bash
-sudo cp ~/.devdash-agent/devdash-agent.service /etc/systemd/system/devdash-agent.service
+sudo cp ~/.dialout/dialout.service /etc/systemd/system/dialout.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now devdash-agent
+sudo systemctl enable --now dialout
 ```
 
-If you run the command itself with `sudo` (i.e. `sudo devdash-agent install-service --system`), it performs all of the above automatically.
+</details>
 
-### 5. Verify
+Then check it:
 
 ```bash
-devdash-agent status
+dialout status
 ```
 
-You should see (`--system` shown; per-user shows `at login`):
-
 ```
-DevDash Agent Status
+Dialout Agent Status
 ────────────────────────────────────────────
   Server:    wss://www.dialout.dev/ws
   API Key:   ****K27F
-  Config:    /Users/you/.devdash-agent/config.json
+  Config:    /Users/you/.dialout/config.json
   Service:   installed (launchd, at boot)
   Cron:      not installed
   Process:   running (PID: 12345, managed by launchd)
 ────────────────────────────────────────────
 ```
 
-In the DevDash web UI, your machine should show a green dot (CONNECTED).
+The machine now shows green in the dashboard and its ports go live. `status`
+reports the **service-managed** process, not just a `--daemon` PID file, so a
+service-installed agent that is up always shows `running` with the live PID.
 
-> **Note:** `status` reports the **service-managed** process (launchd/systemd), not just a background `--daemon` PID file. A service-installed agent that is up will always show `running` with the live PID.
+Repeat steps 3 to 6 for every other machine you want in the room.
 
-## CLI Reference
+## CLI reference
 
 | Command | Description |
 |---------|-------------|
-| `devdash-agent init` | Configure server URL and API key |
-| `devdash-agent start` | Start in foreground (Ctrl+C to stop) |
-| `devdash-agent start --daemon` | Start in background |
-| `devdash-agent stop` | Stop background agent |
-| `devdash-agent status` | Show connection state, service state, and live PID |
-| `devdash-agent install-service` | Install as OS service — starts at **login** |
-| `devdash-agent install-service --system` | Install as OS service — starts at **boot** (needs sudo) |
-| `devdash-agent uninstall-service` | Remove OS service (login or boot) |
-| `devdash-agent setup-cron` | Install a cron watchdog that restarts the agent if it dies |
-| `devdash-agent config show` | Print current configuration |
-| `devdash-agent config set <key> <value>` | Update a config value |
-| `devdash-agent --version` | Show version |
-| `devdash-agent --help` | Show help |
+| `dialout init` | Configure server URL and API key, and optionally install the service |
+| `dialout start` | Start in the foreground (Ctrl-C to stop) |
+| `dialout start --daemon` | Start in the background |
+| `dialout stop` | Stop a background agent |
+| `dialout restart` | Stop and start again |
+| `dialout status` | Connection state, service state, and the live PID |
+| `dialout install-service` | Install as an OS service — starts at **login** |
+| `dialout install-service --system` | Install as an OS service — starts at **boot** (needs sudo) |
+| `dialout uninstall-service` | Remove the OS service, either mode |
+| `dialout setup-cron` | Install a cron watchdog that restarts the agent if it dies |
+| `dialout remove-cron` | Remove the cron watchdog |
+| `dialout setup-cowork` | Wire your shell rc so native terminals join the same tmux session |
+| `dialout repair` | Diagnose and fix a stale or competing supervisor |
+| `dialout profiles` / `dialout use <profile>` | Switch between saved server configurations |
+| `dialout update` | Update to the latest published version |
+| `dialout config show` \| `path` \| `set <key> <value>` \| `reset` | Inspect and edit configuration |
+| `dialout --version` \| `--help` | Version and help |
 
 ## Configuration
 
-Config file: `~/.devdash-agent/config.json`
+Config file: `~/.dialout/config.json`
 
 ```json
 {
-  "serverUrl": "wss://www.dialout.dev/ws",
+  "serverUrl": "wss://dialout.example.com/ws",
   "apiKey": "mch_xxxxxxxxxxxx",
   "scanPorts": [3000, 3001, 4200, 5173, 8000, 8080, 9000],
   "scanRange": { "from": 3000, "to": 9000 },
@@ -169,153 +265,161 @@ Config file: `~/.devdash-agent/config.json`
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `serverUrl` | — | WebSocket URL of the DevDash server (the agent appends `/daemon`) |
-| `apiKey` | — | Machine API key (generated in DevDash UI) |
-| `scanPorts` | common dev ports | Specific ports to check |
-| `scanRange` | 3000–9000 | Port range for full scans |
-| `heartbeatInterval` | 30000 | Keep-alive interval in ms |
+| `serverUrl` | — | WebSocket base URL of your Dialout server; the agent appends `/daemon` |
+| `apiKey` | — | The machine's `mch_…` key, generated in the web UI |
+| `scanPorts` | common dev ports | Specific ports to check on a quick scan |
+| `scanRange` | 3000–9000 | Port range for a full scan |
+| `heartbeatInterval` | 30000 | Keep-alive interval, in milliseconds |
 
 ## How it works
 
 ```
-┌──────────────────┐     WSS      ┌─────────────────┐     HTTPS     ┌──────────┐
-│  DevDash Agent   │◄────────────►│  DevDash Server  │◄────────────►│ Browser  │
-│  (your machine)  │              │  (WebSocket hub)  │              │ (user)   │
-│                  │              │                   │              │          │
-│  - Port scanner  │              │  - Relay          │              │ - xterm  │
-│  - PTY manager   │              │  - Auth           │              │ - UI     │
-│  - FS browser    │              │  - Recording      │              │          │
-│  - Heartbeat     │              │                   │              │          │
-└──────────────────┘              └───────────────────┘              └──────────┘
+┌──────────────────┐   outbound   ┌──────────────────┐    HTTPS     ┌──────────┐
+│  dialout agent   │ ===========▶ │  Dialout server  │ ◀──────────▶ │ Browser  │
+│  (your machine)  │     WSS      │  (yours, self-   │              │ or phone │
+│                  │              │   hosted)        │              │          │
+│  · port scanner  │              │  · relay         │              │ · xterm  │
+│  · PTY / tmux    │              │  · auth          │              │ · UI     │
+│  · AI transcripts│              │  · recording     │              │          │
+│  · FS browser    │              │  · tunnel        │              │          │
+└──────────────────┘              └──────────────────┘              └──────────┘
+        nothing dials in ▲ the arrow only ever points this way
 ```
 
-1. Agent connects outbound to `<serverUrl>/daemon` via WebSocket (no inbound ports needed)
-2. Server authenticates via the `X-API-Key` header (hashed and matched against `machine_api_keys`)
-3. Browser requests (port scan, terminal, browse) are relayed through the server
-4. Terminal I/O streams: Browser ↔ Server ↔ Agent ↔ local PTY
+1. The agent connects outbound to `<serverUrl>/daemon` over WebSocket. No
+   inbound port is needed on the machine.
+2. The server authenticates it with the `X-API-Key` header, SHA-256 compared
+   against the stored hash.
+3. Browser requests — port scan, terminal, browse, run command — are relayed
+   through the server to the agent.
+4. Terminal I/O streams browser ↔ server ↔ agent ↔ local PTY.
 
-## OS Service Details
+## Service management
 
-Logs (both modes) are written to `~/.devdash-agent/logs/`.
+Logs for both modes are written to `~/.dialout/logs/`.
 
-### macOS (launchd)
+<details>
+<summary><b>macOS (launchd)</b></summary>
+
+<br>
 
 ```bash
-# Install (login)            # Install (boot, then run printed sudo steps)
-devdash-agent install-service
-devdash-agent install-service --system
+dialout status
+launchctl print gui/$(id -u)/com.dialout.agent   # login agent
+sudo launchctl print system/com.dialout.agent    # boot daemon
 
-# Check status
-devdash-agent status
-launchctl print gui/$(id -u)/com.devdash.agent   # login agent
-sudo launchctl print system/com.devdash.agent    # boot daemon
+tail -f ~/.dialout/logs/stdout.log
+tail -f ~/.dialout/logs/stderr.log
 
-# View logs
-tail -f ~/.devdash-agent/logs/stdout.log
-tail -f ~/.devdash-agent/logs/stderr.log
-
-# Uninstall (handles both login and boot)
-devdash-agent uninstall-service
-# boot daemon also needs:  sudo launchctl bootout system /Library/LaunchDaemons/com.devdash.agent.plist && sudo rm /Library/LaunchDaemons/com.devdash.agent.plist
+dialout uninstall-service
+# a boot daemon also needs:
+sudo launchctl bootout system /Library/LaunchDaemons/com.dialout.agent.plist \
+  && sudo rm /Library/LaunchDaemons/com.dialout.agent.plist
 ```
 
-### Linux (systemd)
+</details>
+
+<details>
+<summary><b>Linux (systemd)</b></summary>
+
+<br>
 
 ```bash
-# Install
-devdash-agent install-service            # user (login)
-devdash-agent install-service --system   # system (boot) — then run printed sudo steps
+systemctl --user status dialout    # login
+systemctl status dialout           # boot
 
-# Check status
-systemctl --user status devdash-agent    # login
-systemctl status devdash-agent           # boot
+journalctl --user -u dialout -f    # login
+journalctl -u dialout -f           # boot
 
-# View logs
-journalctl --user -u devdash-agent -f    # login
-journalctl -u devdash-agent -f           # boot
-
-# Uninstall
-devdash-agent uninstall-service
+dialout uninstall-service
 ```
 
-## Migrating from the old package (`dialout`)
-
-The agent was renamed from `dialout` to `dialout`. If a
-machine still has the old package, remove it before installing the new one (both
-provide the `devdash-agent` command, so they conflict).
-
-```bash
-# 1. Stop and remove any service installed by the old package
-devdash-agent uninstall-service
-
-# 2. Remove the old global package
-npm uninstall -g dialout
-
-# 3. Install the new package
-npm install -g dialout
-
-# 4. Reinstall the service (config in ~/.devdash-agent is preserved)
-devdash-agent install-service            # login
-# or
-devdash-agent install-service --system   # boot (run the printed sudo steps)
-
-# 5. Verify
-devdash-agent status
-```
-
-Your `~/.devdash-agent/config.json` (server URL + API key) is **not** touched by
-the uninstall, so no re-init is needed.
-
-## Releasing New Versions
-
-Publishing uses the **`npmnic`** CLI — IndiaNIC's registry client. Auth is via
-`npmnic login` (browser/device flow); **no `NPM_INDIANIC_TOKEN` is required**.
-
-```bash
-# One-time, per machine
-npmnic login
-npmnic whoami        # confirm: Publish: Yes
-
-# Release (bump → build → changelog → commit → tag → push → publish, all in one)
-npm run release            # patch  (1.0.0 → 1.0.1)
-npm run release:minor      # minor  (1.0.0 → 1.1.0)
-npm run release:major      # major  (1.0.0 → 2.0.0)
-
-# With a changelog message
-./scripts/release-indianic -m "Fixed reconnect logic"
-
-# Or call npmnic directly
-npmnic publish --minor -m "Added new feature"
-```
-
-`scripts/release-indianic` is a thin wrapper around `npmnic publish`.
+</details>
 
 ## Troubleshooting
 
-### Agent won't connect
+**The agent will not connect.**
+Run `dialout status` first — it shows the config and the service state together.
+A **401** means the API key is not registered for any machine; it is *not* a
+wrong-URL problem. Regenerate the key in the web UI and
+`dialout config set apiKey mch_…`. Check that `serverUrl` is the WebSocket base
+(`wss://host/ws`) and does **not** include `/daemon`. The agent connects
+outbound over TLS on 443, so an outbound firewall is the other thing to check.
 
-- Check `devdash-agent status` for config and service state
-- A **`401`** on connect means the **API key is not registered** for any machine — regenerate the key in the DevDash UI and `devdash-agent config set apiKey mch_...` (it is *not* a wrong-URL problem)
-- The agent connects to `<serverUrl>/daemon` — make sure `serverUrl` is the WS base (e.g. `wss://www.dialout.dev/ws`), not including `/daemon`
-- Check firewall: the agent connects outbound over TLS (443) to the server
+**"not running" right after a reboot.**
+A *login* service only starts once you log into the desktop session. For a
+headless machine, or one you want to reach before login, use
+`install-service --system`. At boot DNS may not be up yet, so a brief
+`getaddrinfo ENOTFOUND` in `stderr.log` is expected — the agent retries every
+5 s and connects when the network arrives.
 
-### "not running" right after reboot
+**Terminals do not work.**
+Confirm the logs say *Connected and ready*, then check `node-pty`:
+`node -e "require('node-pty')"`. If it fails, `npm rebuild node-pty`.
 
-- With a **login** service, the agent only starts after you log into the desktop session. For headless / before-login start, use `install-service --system`.
-- At boot, DNS may not be ready yet — you may see `getaddrinfo ENOTFOUND` in `stderr.log` briefly; the agent retries every 5s and connects once the network is up.
+**The service will not start.**
+macOS: read `~/.dialout/logs/stderr.log`. Linux:
+`journalctl --user -u dialout` (drop `--user` for a `--system` install). Make
+sure `dialout init` ran before the service was installed. If a previous
+supervisor is stuck, `dialout repair` diagnoses and clears it.
 
-### Terminal not working
+## Upgrading from `@indianic/devdash-agent`
 
-- Ensure the agent shows "Connected and ready" in logs
-- Verify `node-pty` installed correctly: `node -e "require('node-pty')"`
-- If `node-pty` fails, rebuild: `npm rebuild node-pty`
+Earlier private builds were published as `@indianic/devdash-agent` and kept their
+configuration in `~/.devdash-agent`. Both packages provide a `dialout` binary,
+so remove the old one first:
 
-### Service not starting
+```bash
+dialout uninstall-service          # stop the old service
+npm uninstall -g @indianic/devdash-agent
+npm install -g dialout
+dialout install-service --system   # or without --system for a login service
+dialout status
+```
 
-- macOS: check `~/.devdash-agent/logs/stderr.log`
-- Linux: check `journalctl --user -u devdash-agent` (or without `--user` for `--system`)
-- Ensure `devdash-agent init` was run before installing the service
+Your old configuration is **copied** — not moved — from `~/.devdash-agent` into
+`~/.dialout` on first run, so an old agent still installed elsewhere keeps
+working and no re-`init` is needed.
 
-## License
+## The mobile app
 
-UNLICENSED — IndiaNIC proprietary
+Native **iOS and Android** apps are coming soon to the App Store and Google
+Play. Until then the web dashboard installs as a PWA — *Add to Home Screen* —
+with push notifications on both platforms today.
+
+## Contributing and issues
+
+The whole project is open source at
+**[github.com/indianic/dialout](https://github.com/indianic/dialout)**. Bugs and
+feature requests go in
+[Issues](https://github.com/indianic/dialout/issues); see
+[CONTRIBUTING.md](https://github.com/indianic/dialout/blob/main/CONTRIBUTING.md).
+Security reports go to the process in
+[SECURITY.md](https://github.com/indianic/dialout/blob/main/SECURITY.md).
+
+---
+
+<div align="center">
+
+Built by **[Sandeep Mundra](mailto:sandeep@indianic.com)**, CTO of IndiaNIC, to
+solve a problem he had himself — working on his office and home machines from
+wherever he happened to be.
+
+<sub>Sponsored and maintained by</sub>
+
+### [IndiaNIC Infotech Ltd](https://www.indianic.com)
+
+[![Website](https://img.shields.io/badge/www.indianic.com-0c0e13?style=flat-square)](https://www.indianic.com)
+[![Email](https://img.shields.io/badge/hello@indianic.com-1a56db?style=flat-square)](mailto:hello@indianic.com)
+
+</div>
+
+Dialout is free and MIT licensed, and always will be. If you want it customised
+for your team, integrated with your stack, or deployed and run for you, that is
+what IndiaNIC does — reach us at
+**[hello@indianic.com](mailto:hello@indianic.com)** or
+**[www.indianic.com](https://www.indianic.com)**.
+
+## Licence
+
+MIT. Copyright © 2026 IndiaNIC Infotech Ltd.

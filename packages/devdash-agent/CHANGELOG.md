@@ -236,7 +236,7 @@ All notable changes to this project will be documented in this file.
 
 ## [2.3.6] - 2026-07-15
 
-- fix(terminals): report the session's LIVE working directory instead of a creation-time snapshot. listSessions now reads #{pane_current_path} from the list-sessions call it already makes, so the folder/path shown in /terminals follows the shell as the user cds — and works for native sessions that carry no DevDash metadata. The @devdash_folder_path option it used to report is written once at session creation and never updated, so it went stale immediately (verified live: it reported /Users/indianic while the shell was in /Users/indianic/www/products/reimage). folderPath also joins the poll's change key, so a bare cd propagates instead of waiting for the 60s resync. list-sessions fields are now \x1f-separated: '|' is legal in both session names and paths, which made a path field unparseable.
+- fix(terminals): report the session's LIVE working directory instead of a creation-time snapshot. listSessions now reads #{pane_current_path} from the list-sessions call it already makes, so the folder/path shown in /terminals follows the shell as the user cds — and works for native sessions that carry no DevDash metadata. The @devdash_folder_path option it used to report is written once at session creation and never updated, so it went stale immediately (verified live: it reported the home directory while the shell was in a project subfolder). folderPath also joins the poll's change key, so a bare cd propagates instead of waiting for the 60s resync. list-sessions fields are now \x1f-separated: '|' is legal in both session names and paths, which made a path field unparseable.
 
 ## [2.3.5] - 2026-07-15
 

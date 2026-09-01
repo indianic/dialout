@@ -64,7 +64,7 @@ a "most-used terminal" analytics panel.
   on `dialout`). A failed install/build aborts the deploy
   *before* pm2 restarts.
 - **Agent release:** `cd packages/devdash-agent && npm run release` (patch) /
-  `release:minor` — `npmnic publish` bumps, builds, changelogs, commits, tags,
+  `npm version minor` then `npm run build` and `npm publish` — bump, build, tag,
   pushes and publishes. Remote machines self-update.
 - **Local testing:** `npm run dev` (Next :50051 + ws-server :50052);
   agent from source: `node dist/cli.js start --profile local`.

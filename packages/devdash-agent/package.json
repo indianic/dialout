@@ -1,7 +1,7 @@
 {
   "name": "dialout",
-  "version": "2.7.4",
-  "description": "Dialout agent — connects a developer machine outbound to your Dialout server for port checks, tmux terminals, filesystem browsing, process control and HTTP tunnels. No inbound ports.",
+  "version": "1.0.0",
+  "description": "Dialout agent — reach your office, home or build machine from any browser or phone. Remote tmux terminals, live port checks, filesystem browsing, process control and HTTP tunnels. The agent dials out: no inbound ports, no VPN, no port forwarding.",
   "bin": {
     "dialout": "./bin/devdash-agent.js"
   },
@@ -21,20 +21,34 @@
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "postinstall": "node scripts/postinstall.js",
-    "release": "./scripts/release-indianic",
-    "release:minor": "./scripts/release-indianic --minor",
-    "release:major": "./scripts/release-indianic --major",
     "prepack": "node scripts/prepack.js"
   },
   "keywords": [
-    "self-hosted",
-    "tmux",
+    "dialout",
     "remote-development",
+    "remote-access",
+    "self-hosted",
     "developer-tools",
+    "tmux",
+    "terminal",
+    "web-terminal",
+    "port-scanner",
+    "localhost-tunnel",
+    "http-tunnel",
+    "devops-dashboard",
+    "claude-code",
+    "codex",
+    "ai-agent",
     "agent",
-    "dialout"
+    "daemon",
+    "pty",
+    "websocket"
   ],
-  "author": "IndiaNIC",
+  "author": {
+    "name": "Sandeep Mundra",
+    "email": "sandeep@indianic.com",
+    "url": "https://www.indianic.com"
+  },
   "license": "MIT",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
@@ -66,5 +80,16 @@
   },
   "bundleDependencies": [
     "@dialout/shared"
-  ]
+  ],
+  "contributors": [
+    {
+      "name": "IndiaNIC Infotech Ltd",
+      "email": "hello@indianic.com",
+      "url": "https://www.indianic.com"
+    }
+  ],
+  "bugs": {
+    "url": "https://github.com/indianic/dialout/issues",
+    "email": "hello@indianic.com"
+  }
 }

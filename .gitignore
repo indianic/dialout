@@ -26,3 +26,6 @@ packages/*/package-lock.json
 # Dialout launch — real deploy credentials, never commit
 .dialout-deploy.local.env
 *.local.env
+
+# Stray local artifact from an MCP server, not part of the project.
+sqlite_mcp_server.db

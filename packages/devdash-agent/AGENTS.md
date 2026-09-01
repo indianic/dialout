@@ -1,21 +1,21 @@
 <!-- Parent: ../AGENTS.md -->
 <!-- Generated: 2026-08-21 | Updated: 2026-08-21 -->
 
-# devdash-agent
+# dialout
 
 ## Purpose
 
 CLI daemon installed on each developer machine. Connects **outbound** over WSS `/daemon` with `X-API-Key` (`mch_…`). Published to `https://registry.npmjs.org` as `dialout` (`os: ["darwin", "linux"]`). Version is independent of the web app (currently 2.7.3 vs app 2.0.0).
 
-Config lives at `~/.devdash-agent/config.json`. `single-instance.ts` prevents competing daemons.
+Config lives at `~/.dialout/config.json`. `single-instance.ts` prevents competing daemons.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `package.json` | Bin `devdash-agent`. `files`: `bin`, `dist`, `scripts/postinstall.js`, `README.md`. `npm test` = `tsc` + `node --test`. `release` → `scripts/release-indianic`. |
+| `package.json` | Bin `dialout`. `files`: `bin`, `dist`, `scripts/postinstall.js`, `README.md`. `npm test` = `tsc` + `node --test`. Published to the public registry as `dialout`; `prepack` bundles `@dialout/shared`. |
 | `tsconfig.json` | Compiles `src/` → `dist/`. **Build before publishing**; `src/` is the source of truth but npm ships `dist/`. |
-| `README.md` | Install (`npm config set @indianic:registry …`) and command list. |
+| `README.md` | The npm package page: onboarding flow, CLI reference, troubleshooting. End-user facing — no release or registry-admin instructions belong here. |
 | `CHANGELOG.md` | Agent releases. |
 | `.npmignore` | Keep test/docs out of the tarball. |
 | `CLAUDE.md` | Local plugin notes (BrowserConnect) — **not** agent architecture. Use this AGENTS.md + root `CLAUDE.md`. |
@@ -35,7 +35,7 @@ Config lives at `~/.devdash-agent/config.json`. `single-instance.ts` prevents co
 ### Working In This Directory
 
 ```bash
-cd packages/devdash-agent
+cd packages/dialout
 npm run build           # tsc → dist/
 npm test                # build + node --test
 ```

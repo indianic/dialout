@@ -70,7 +70,7 @@ packages/devdash-agent/
 │   ├── service-installer.ts      # Install as OS service (launchd/systemd)
 │   └── config.ts                 # Read/write ~/.devdash-agent/config.json
 ├── scripts/
-│   └── release-indianic          # Publish to https://registry.npmjs.org
+│   └── (publishing is plain `npm publish`; no wrapper script)
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -394,7 +394,7 @@ Package published to `https://registry.npmjs.org` as `dialout`.
 
 ### Release Script
 
-Adapted from `/Users/indianic/www/tools/echobase_resolver/scripts/release-indianic`:
+Historical note: this plan originally specified a `release-indianic` wrapper script for a private registry. That was dropped at the open-source launch — the agent is published to the public registry with `npm publish` and no wrapper. The block below is kept only as a record of the original plan:
 - Auto commits pending changes
 - Bumps version (patch/minor/major)
 - Builds TypeScript
@@ -405,10 +405,7 @@ Adapted from `/Users/indianic/www/tools/echobase_resolver/scripts/release-indian
 - Optionally updates local global install
 
 ```bash
-./scripts/release-indianic                  # patch bump
-./scripts/release-indianic --minor          # minor bump
-./scripts/release-indianic "Fixed reconnect bug"  # with changelog
-./scripts/release-indianic -y               # non-interactive (CI)
+npm version patch && npm run build && npm publish
 ```
 
 ### Install Instructions (shown in UI after "Add Machine")

@@ -1,7 +1,30 @@
 {
-  "name": "devdash",
+  "name": "dialout",
   "version": "2.0.0",
   "private": true,
+  "description": "Dialout — a self-hosted development control room. Reach every machine you code on from one URL: live port status, remote tmux terminals, filesystem browsing, process control, HTTP tunnels, and your Claude Code, Codex and Grok sessions as chat. The agent dials out, so nothing has to dial in.",
+  "license": "MIT",
+  "author": {
+    "name": "Sandeep Mundra",
+    "email": "sandeep@indianic.com",
+    "url": "https://www.indianic.com"
+  },
+  "contributors": [
+    {
+      "name": "IndiaNIC Infotech Ltd",
+      "email": "hello@indianic.com",
+      "url": "https://www.indianic.com"
+    }
+  ],
+  "homepage": "https://www.dialout.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indianic/dialout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/indianic/dialout/issues",
+    "email": "hello@indianic.com"
+  },
   "workspaces": [
     "packages/devdash-shared",
     "packages/devdash-agent"
