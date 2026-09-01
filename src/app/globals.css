@@ -454,12 +454,16 @@ input[type="date"].inp::-webkit-calendar-picker-indicator { filter: var(--calend
 .btn-ghost:hover  { background: var(--glass-strong); border-color: var(--b3); }
 .btn-ghost:active { transform: scale(.97); }
 
-/* legacy solid → map to gradient look */
+/* legacy solid → map to gradient look.
+   Pill radius, matching .btn-grad and .btn-ghost. It used to be --r-sm, which
+   put a rounded rectangle directly beside a pill wherever the two sat in the
+   same row — most visibly Revoke next to Regen on a machine card. Buttons in
+   one group have to share a silhouette; only their colour should differ. */
 .btn-solid {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600;
   background: var(--accent-solid); color: #fff; border: none;
-  padding: 9px 16px; cursor: pointer; border-radius: var(--r-sm);
+  padding: 10px 16px; cursor: pointer; border-radius: 999px;
   transition: transform .15s, filter .2s;
 }
 .btn-solid:hover  { filter: brightness(1.07); }
@@ -956,4 +960,55 @@ input[type="date"].inp::-webkit-calendar-picker-indicator { filter: var(--calend
   .mk-split { grid-template-columns: minmax(0,1fr) !important; gap: 36px !important; }
   .mk-diff-row { grid-template-columns: 34px minmax(0,1fr) !important; gap: 16px !important; }
   .mk-diff-row > p { grid-column: 2; }
+}
+
+
+/* ── Machine card action icons ───────────────────────────────────────────────
+   Bigger than .btn-icon and colour-coded per action, so the row is scannable
+   before it is read. Two rules carry the look:
+
+   1. The ink border. A pastel fill on its own reads as a disabled control —
+      the dark outline is what says "press me". It is derived from the same hue
+      as the fill rather than being a neutral grey, so each button is one
+      colour at two weights instead of a tint inside a generic box.
+
+   2. Separate light and dark pastels. A pastel tuned to sit softly on white
+      goes muddy on near-black, and one value tuned for both is tuned for
+      neither. Each button sets all four custom properties inline and this
+      block picks the pair, so a card can never inherit a light fill onto a
+      dark ground.
+
+   Colour is never the only signal: every button keeps its title and
+   aria-label, and the icon glyph already distinguishes it. */
+.mc-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  cursor: pointer;
+  background: var(--mc-bg);
+  color: var(--mc-ink);
+  border: 1.5px solid color-mix(in srgb, var(--mc-ink) 55%, transparent);
+  transition: transform .14s cubic-bezier(.22,1,.36,1), filter .16s, box-shadow .16s;
+}
+.mc-icon:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--mc-ink) 70%, transparent);
+  border-color: var(--mc-ink);
+}
+.mc-icon:active { transform: scale(.94); }
+.mc-icon:focus-visible {
+  outline: 2px solid var(--mc-ink);
+  outline-offset: 2px;
+}
+
+[data-theme="dark"] .mc-icon {
+  background: var(--mc-bg-dark);
+  color: var(--mc-ink-dark);
+  border-color: color-mix(in srgb, var(--mc-ink-dark) 45%, transparent);
+}
+[data-theme="dark"] .mc-icon:hover { border-color: var(--mc-ink-dark); }
+
+/* Touch targets: 38px is comfortable with a mouse and tight with a thumb. */
+@media (max-width: 900px) {
+  .mc-icon { width: 42px; height: 42px; border-radius: 12px; }
 }

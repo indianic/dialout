@@ -40,6 +40,11 @@ export function useDashboardSocket({
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // Nothing to connect to yet. The dashboard mounts this hook before the
+    // session has resolved, so userId is 0 and wsUrl is '' on the first render;
+    // without this the socket would fail immediately and then retry every three
+    // seconds forever against a URL that can never work.
+    if (!wsUrl || !userId || !machineId) return;
 
     const url = `${wsUrl}/dashboard?userId=${userId}&machineId=${machineId}`;
     const ws = new WebSocket(url);
@@ -92,7 +97,7 @@ export function useDashboardSocket({
     ws.onerror = () => {
       ws.close();
     };
-  }, [wsUrl, userId, machineId, onMachineStatus, onPortStatus, onNotification, onAiEvents]);
+  }, [wsUrl, userId, machineId, onMachineStatus, onMachineSync, onPortStatus, onNotification, onAiEvents]);
 
   useEffect(() => {
     connect();

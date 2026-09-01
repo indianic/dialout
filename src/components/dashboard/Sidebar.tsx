@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { LogoMark } from '@/components/marketing/Logo';
 import { usePathname } from 'next/navigation';
 import {
   LayoutGrid, Share2, Radar, TerminalSquare, Server, MonitorSmartphone, Settings,
@@ -47,7 +48,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: { mobileOpen: boo
       <div className="flex items-center justify-between px-4 pt-5 pb-4">
         <Link href="/projects" className="flex items-center gap-2.5" onClick={onCloseMobile}>
           <span className="grid place-items-center rounded-lg" style={{ width: 34, height: 34, background: 'var(--accent-solid)' }}>
-            <LayoutGrid size={18} color="#fff" strokeWidth={2.4} />
+            <LogoMark size={19} className="text-white" />
           </span>
           <span style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: 700, letterSpacing: '-0.02em', fontSize: 23, lineHeight: 1, color: 'var(--txt)' }}>Dialout</span>
         </Link>

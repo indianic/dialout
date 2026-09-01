@@ -6,6 +6,60 @@ import {
   KeyRound, Copy, Eye, EyeOff, RefreshCw, Search, Trash2,
 } from 'lucide-react';
 import { Machine } from '@/types';
+import DeleteMachineModal from '@/components/DeleteMachineModal';
+import { useDashboard } from '@/components/dashboard/DashboardContext';
+
+/**
+ * The pastel icon set on a machine card.
+ *
+ * Each action gets its own hue so the row is scannable by colour before it is
+ * read — at a glance you are looking for "the green one", not re-reading four
+ * grey squares. The dark ink border is what stops pastels from reading as
+ * disabled: a soft fill on its own looks like a control you cannot press.
+ *
+ * `light`/`dark` are separate because a pastel that reads as soft on white
+ * reads as muddy on near-black, and one set tuned for both is a set tuned for
+ * neither.
+ */
+const ICON_TONES = {
+  terminal: { light: '#dbeafe', dark: '#1e3a5f', ink: '#1a56db', inkDark: '#93c5fd' },
+  logs:     { light: '#ede9fe', dark: '#312a5e', ink: '#6d3fd4', inkDark: '#c4b5fd' },
+  visible:  { light: '#dcfce7', dark: '#14432a', ink: '#0f7a3d', inkDark: '#86efac' },
+  setup:    { light: '#fef3c7', dark: '#452f10', ink: '#a55a00', inkDark: '#fcd34d' },
+  remove:   { light: '#ffe4e6', dark: '#4c1d24', ink: '#c2273f', inkDark: '#fda4af' },
+} as const;
+
+function IconAction({
+  tone, label, onClick, children, active = true,
+}: {
+  tone: keyof typeof ICON_TONES;
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  active?: boolean;
+}) {
+  const t = ICON_TONES[tone];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="mc-icon"
+      style={{
+        // Both halves of each pair are set here and swapped by a media query in
+        // globals.css, so a card never inherits a light fill on a dark ground.
+        ['--mc-bg' as string]: t.light,
+        ['--mc-bg-dark' as string]: t.dark,
+        ['--mc-ink' as string]: t.ink,
+        ['--mc-ink-dark' as string]: t.inkDark,
+        opacity: active ? 1 : 0.55,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 interface MachineWithStatus extends Machine {
   isOnline: boolean;
@@ -53,6 +107,14 @@ export default function MachineManagement({ userId, machines: initialMachines, c
   const [generatedKey, setGeneratedKey] = useState<{ machineId: number; key: string } | null>(null);
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [showInstructions, setShowInstructions] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<MachineWithStatus | null>(null);
+
+  // Online state comes from the dashboard socket, not from this component's own
+  // fetch. The fetch is a snapshot taken when the page mounted; the socket is
+  // what tells us an agent connected thirty seconds later — which is the normal
+  // order of events, since you generate the key here and *then* go and run
+  // `dialout init` on the machine.
+  const { onlineMachineIds, deleteMachine } = useDashboard();
 
   // Session logs modal state
   const [logsMachine, setLogsMachine] = useState<MachineWithStatus | null>(null);
@@ -71,7 +133,13 @@ export default function MachineManagement({ userId, machines: initialMachines, c
     setLoading(false);
   }, [userId]);
 
-  useEffect(() => { loadMachines(); }, [loadMachines]);
+  // Re-read on mount, and again whenever the session's machine list changes.
+  // Adding a machine goes through the context, which re-mints the session; this
+  // component holds its own richer copy carrying key and status fields, so
+  // without the signature dependency a newly added machine only appeared after
+  // a manual page reload. One effect rather than two, or mount fires twice.
+  const machineSignature = initialMachines.map((m) => m.id).join(',');
+  useEffect(() => { loadMachines(); }, [machineSignature, loadMachines]);
 
   const loadLogs = useCallback(async (machineId: number, page: number, search: string) => {
     setLogsLoading(true);
@@ -139,23 +207,40 @@ export default function MachineManagement({ userId, machines: initialMachines, c
     loadMachines();
   }
 
+  async function confirmDelete() {
+    if (!deleting) return;
+    const ok = await deleteMachine(deleting.id);
+    if (ok) { setDeleting(null); loadMachines(); }
+  }
+
   if (loading) {
     return <div className="text-center py-8 text-sm" style={{ color: 'var(--muted)' }}>Loading machines...</div>;
   }
+
+  // The socket's view wins. `m.isOnline` was true at fetch time and goes stale
+  // the moment an agent connects or drops; onlineMachineIds is kept current.
+  const rows = machines.map((m) => ({ ...m, isOnline: onlineMachineIds.includes(m.id) }));
 
   const totalPages = Math.ceil(logsTotal / logsPerPage);
 
   return (
     <div>
+      <DeleteMachineModal
+        open={!!deleting}
+        machineName={deleting?.name || ''}
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
+
       <div className="sec-label">
         <MonitorSmartphone size={15} style={{ color: 'var(--muted)' }} />
         <span>Machines</span>
-        <span className="sec-count">{machines.length}</span>
+        <span className="sec-count">{rows.length}</span>
       </div>
 
       {/* Machine cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {machines.map((m) => (
+        {rows.map((m) => (
           <div
             key={m.id}
             className="card-v2"
@@ -175,28 +260,38 @@ export default function MachineManagement({ userId, machines: initialMachines, c
                   <span className="tag-chip">Hidden</span>
                 )}
               </div>
-              <div className="card-acts flex gap-1 items-center">
+              <div className="card-acts flex gap-1.5 items-center">
                 {m.isOnline && onTerminal && (
-                  <button className="btn-icon" onClick={() => onTerminal(m.id, m.name)}
-                    title="Open Terminal" aria-label="Open Terminal" style={{ color: 'var(--accent)' }}>
-                    <SquareTerminal size={15} />
-                  </button>
+                  <IconAction tone="terminal" label="Open terminal" onClick={() => onTerminal(m.id, m.name)}>
+                    <SquareTerminal size={17} />
+                  </IconAction>
                 )}
-                <button className="btn-icon" onClick={() => openLogs(m)}
-                  title="Session Logs" aria-label="Session Logs">
-                  <ScrollText size={15} />
-                </button>
-                <button className="btn-icon"
+                <IconAction tone="logs" label="Session logs" onClick={() => openLogs(m)}>
+                  <ScrollText size={17} />
+                </IconAction>
+                <IconAction
+                  tone="visible"
+                  active={!m.hidden}
+                  label={m.hidden ? 'Show in machine list' : 'Hide from machine list'}
                   onClick={() => toggleHidden(m.id, !m.hidden)}
-                  title={m.hidden ? 'Show in dropdown' : 'Hide from dropdown'}
-                  aria-label={m.hidden ? 'Show in dropdown' : 'Hide from dropdown'}
-                  style={{ color: m.hidden ? 'var(--dim)' : 'var(--muted)' }}
-                >{m.hidden ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-                <button className="btn-icon"
+                >
+                  {m.hidden ? <EyeOff size={17} /> : <Eye size={17} />}
+                </IconAction>
+                <IconAction
+                  tone="setup"
+                  label="Setup instructions"
                   onClick={() => setShowInstructions(showInstructions === m.id ? null : m.id)}
-                  title="Setup" aria-label="Setup">
-                  <Settings size={15} />
-                </button>
+                >
+                  <Settings size={17} />
+                </IconAction>
+                {/* Deleting the machine you are signed in on would invalidate
+                    the session mid-request, so the button is not offered there.
+                    The API refuses it too — this only saves the round trip. */}
+                {m.id !== currentMachineId && (
+                  <IconAction tone="remove" label="Delete machine" onClick={() => setDeleting(m)}>
+                    <Trash2 size={17} />
+                  </IconAction>
+                )}
               </div>
             </div>
 
@@ -286,8 +381,8 @@ export default function MachineManagement({ userId, machines: initialMachines, c
 npm install -g dialout
 
 # Configure + start
-devdash-agent init
-devdash-agent setup-cron`}
+dialout init
+dialout setup-cron`}
                 </pre>
               </div>
             )}

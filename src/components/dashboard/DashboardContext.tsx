@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, Re
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Project, ProjectFormData, SystemService, SessionInfo, Stats } from '@/types';
 import { useToast } from '@/components/Toast';
+import { useDashboardSocket } from '@/hooks/useDashboardSocket';
 import type { ViewMode } from '@/components/TerminalPanel';
 
 export type SharedProject = Project & {
@@ -52,6 +53,8 @@ interface DashboardCtx {
   reloadProjects: () => Promise<void>;
   reloadServices: () => Promise<void>;
   reloadShared: () => Promise<void>;
+  loadOnlineMachines: () => Promise<void>;
+  deleteMachine: (id: number) => Promise<boolean>;
   saveProject: (data: ProjectFormData, id?: number) => Promise<void>;
   deleteProject: (id: number) => Promise<void>;
   deleteProjects: (ids: number[]) => Promise<void>;
@@ -184,6 +187,40 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (session && !session.requires2faEnrollment) { reloadProjects(); reloadServices(); reloadShared(); loadOnlineMachines(); }
   }, [session, reloadProjects, reloadServices, reloadShared, loadOnlineMachines]);
 
+  // Live machine status.
+  //
+  // `loadOnlineMachines` runs once on mount, which meant a machine that came
+  // online afterwards — the usual case, since you generate the key and *then*
+  // go and run `dialout init` on the machine — stayed grey until a manual
+  // reload. The ws-server already broadcasts machine_online / machine_offline
+  // and a machine_status_sync snapshot on connect; nothing on the dashboard was
+  // listening to any of it.
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL
+    || (typeof window !== 'undefined'
+      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
+      : '');
+
+  const onMachineStatus = useCallback((machineId: number, online: boolean) => {
+    setOnlineMachineIds((prev) => {
+      const has = prev.includes(machineId);
+      if (online === has) return prev;   // no state change, no re-render
+      return online ? [...prev, machineId] : prev.filter((id) => id !== machineId);
+    });
+  }, []);
+
+  // The sync snapshot is authoritative and replaces the list wholesale — it is
+  // how the dashboard recovers after a socket drop, where individual online and
+  // offline events were missed and the local list has drifted.
+  const onMachineSync = useCallback((ids: number[]) => setOnlineMachineIds(ids), []);
+
+  useDashboardSocket({
+    userId: session?.userId ?? 0,
+    machineId: session?.machineId ?? 0,
+    wsUrl: session && !session.requires2faEnrollment ? wsUrl : '',
+    onMachineStatus,
+    onMachineSync,
+  });
+
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([reloadProjects(), reloadServices(), reloadShared(), loadOnlineMachines()]);
@@ -214,6 +251,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       toast('Could not add machine');
     }
   }, [checkAuth, toast]);
+
+  /**
+   * Delete a machine and everything belonging to it.
+   *
+   * The confirmation lives in the UI; by the time this runs the user has said
+   * yes. `checkAuth` afterwards because the session carries the machine list
+   * and the sidebar switcher reads it from there — without it the deleted
+   * machine stays in the dropdown until the next page load.
+   */
+  const deleteMachine = useCallback(async (id: number): Promise<boolean> => {
+    try {
+      const r = await fetch(`/api/machines/${id}`, { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(data.error || 'Could not delete machine'); return false; }
+      const gone = data.deleted?.projects ?? 0;
+      toast(gone > 0 ? `Machine deleted, along with ${gone} project${gone === 1 ? '' : 's'}` : 'Machine deleted');
+      await checkAuth();
+      await Promise.all([reloadProjects(), reloadServices(), loadOnlineMachines()]);
+      return true;
+    } catch {
+      toast('Could not delete machine');
+      return false;
+    }
+  }, [checkAuth, reloadProjects, reloadServices, loadOnlineMachines, toast]);
 
   const handleLogout = useCallback(async () => {
     await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) });
@@ -356,6 +417,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const value: DashboardCtx = {
     session, authChecked, checkAuth, handleMachineSwitch, handleAddMachine, handleLogout, openAddMachine,
     projects, sharedProjects, services, onlineMachineIds, loading, refreshing, lastRefresh, stats,
+    loadOnlineMachines, deleteMachine,
     search, setSearch, runnerFilter, setRunnerFilter,
     refreshAll, reloadProjects, reloadServices, reloadShared, saveProject, deleteProject, deleteProjects, runProcessAction, unsubscribeShare, getProject,
     openAdd, openEdit, openDelete, openShare, closeOverlay,

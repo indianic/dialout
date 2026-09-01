@@ -3,7 +3,7 @@
 import { useState, ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { useViewportHeight } from '@/hooks/useViewportHeight';
-import { LayoutGrid } from 'lucide-react';
+import { LogoMark } from '@/components/marketing/Logo';
 import { useDashboard } from './DashboardContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -16,7 +16,7 @@ function BrandSplash({ sub }: { sub?: string }) {
     <div className="flex items-center justify-center" style={{ minHeight: '100dvh' }}>
       <div className="text-center">
         <div className="grid place-items-center mx-auto rounded-2xl mb-4" style={{ width: 60, height: 60, background: 'var(--accent-solid)' }}>
-          <LayoutGrid size={30} color="#fff" strokeWidth={2.3} />
+          <LogoMark size={31} className="text-white" />
         </div>
         <div style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: 700, letterSpacing: '-0.02em', fontSize: 40, lineHeight: 1, color: 'var(--txt)' }}>Dialout</div>
         {sub && <div className="font-mono mt-2 text-[11px]" style={{ color: 'var(--dim)', letterSpacing: '.14em' }}>{sub}</div>}
