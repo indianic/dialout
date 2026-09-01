@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { authenticator } from 'otplib';
-import { generateTotpSecret, buildOtpauthUri, verifyTotp } from '../totp';
+import { generateTotpSecret, buildOtpauthUri, verifyTotp, TOTP_ISSUER } from '../totp';
 
 describe('totp', () => {
   it('generates a non-empty base32 secret', () => {
@@ -29,7 +29,11 @@ describe('totp', () => {
   it('builds an otpauth URI with issuer and account', () => {
     const uri = buildOtpauthUri('JBSWY3DPEHPK3PXP', 'a@b.com');
     expect(uri.startsWith('otpauth://totp/')).toBe(true);
-    expect(uri).toContain('DevDash');
+    // Asserted against the exported constant rather than a literal, so a
+    // rebrand updates one place. The issuer is what an authenticator app shows
+    // beside the code — a wrong one is a support ticket, not a broken login.
+    expect(uri).toContain(`issuer=${TOTP_ISSUER}`);
+    expect(uri).toContain(`${TOTP_ISSUER}:`);
     expect(uri).toContain('a%40b.com');
   });
 });

@@ -4,7 +4,7 @@ import { authenticator } from 'otplib';
 // (secret-crypto.ts); only plaintext base32 secrets pass through here.
 
 export const TOTP_WINDOW = 1;      // accept ±1 30s step for clock drift
-export const TOTP_ISSUER = 'DevDash';
+export const TOTP_ISSUER = 'Dialout';
 
 authenticator.options = { window: TOTP_WINDOW };
 

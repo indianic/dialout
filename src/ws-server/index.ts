@@ -1288,7 +1288,7 @@ const MAX_TUNNEL_BODY = 10 * 1024 * 1024; // 10MB
 
 function PLACEHOLDER_PAGE(title: string, message: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DevDash Tunnel — ${title}</title>
+<title>Dialout Tunnel — ${title}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e5e5e5;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
 .card{max-width:480px;width:100%;background:#171717;border:1px solid #262626;border-radius:12px;padding:40px;text-align:center}
 .icon{font-size:48px;margin-bottom:16px;opacity:0.6}
@@ -1301,6 +1301,26 @@ code{background:#262626;padding:2px 8px;border-radius:4px;font-size:13px;color:#
 <a class="retry" onclick="location.reload()">Retry</a></div></body></html>`;
 }
 
+/**
+ * How long to wait for the machine to answer one tunneled request.
+ *
+ * 30s was too short for the case this tunnel is most often pointed at: a
+ * framework dev server compiling a route on demand. A cold Next.js route can
+ * take well over half a minute to build, and every asset request queued behind
+ * it timed out too — which is what produced a page of 503s for page.js,
+ * layout.js and main-app.js while the rest of the site loaded fine.
+ */
+const TUNNEL_TIMEOUT_MS = 90_000;
+
+/**
+ * Why the tunnel could not answer. `null` used to mean both "no agent" and
+ * "the agent never replied", and the caller rendered the same page for each —
+ * so a slow dev server produced "Machine offline. Start the agent with:
+ * dialout start" for an agent that was connected the whole time. Telling
+ * someone to fix the thing that is not broken is worse than no message.
+ */
+type TunnelFailure = 'offline' | 'timeout';
+
 async function requestHttpTunnel(
   machineId: number,
   options: { port?: number; baseUrl?: string },
@@ -1308,17 +1328,17 @@ async function requestHttpTunnel(
   path: string,
   headers: Record<string, string>,
   body?: string
-): Promise<{ status: number; headers: Record<string, string>; body: string } | null> {
+): Promise<{ status: number; headers: Record<string, string>; body: string } | TunnelFailure> {
   const daemon = daemonConnections.get(machineId);
-  if (!daemon || daemon.ws.readyState !== WebSocket.OPEN) return null;
+  if (!daemon || daemon.ws.readyState !== WebSocket.OPEN) return 'offline';
 
   const requestId = generateRequestId();
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(requestId);
-      resolve(null);
-    }, 30000);
+      resolve('timeout');
+    }, TUNNEL_TIMEOUT_MS);
 
     pendingRequests.set(requestId, (result) => {
       clearTimeout(timeout);
@@ -1596,18 +1616,35 @@ server.on('request', async (req, res) => {
     const bodyData = await parseBody(req);
     const bodyStr = Object.keys(bodyData).length > 0 ? Buffer.from(JSON.stringify(bodyData)).toString('base64') : undefined;
 
-    // Forward relevant headers (strip host/connection)
+    // Forward relevant headers (strip host/connection).
+    //
+    // accept-encoding goes too, deliberately. The agent's fetch transparently
+    // decompresses the response body but leaves content-encoding and the
+    // original content-length on the headers it reports back, so a compressed
+    // asset arrived here as decompressed bytes described by a compressed
+    // length — and the browser truncated it. Asking the local server not to
+    // compress in the first place removes the mismatch rather than trying to
+    // reconcile it, and the browser-facing hop is compressed by the proxy
+    // anyway.
     const fwdHeaders: Record<string, string> = {};
     for (const [key, val] of Object.entries(req.headers)) {
-      if (['host', 'connection', 'upgrade', 'x-api-key'].includes(key)) continue;
+      if (['host', 'connection', 'upgrade', 'x-api-key', 'accept-encoding'].includes(key)) continue;
       if (typeof val === 'string') fwdHeaders[key] = val;
     }
 
     const result = await requestHttpTunnel(machineId, tunnelOpts, req.method, tunnelPath, fwdHeaders, bodyStr);
 
-    if (result === null) {
+    if (result === 'offline') {
       res.writeHead(503, { 'Content-Type': 'text/html' });
-      res.end(PLACEHOLDER_PAGE('Machine offline', 'The daemon on this machine is not connected. Start the agent with: devdash-agent start'));
+      res.end(PLACEHOLDER_PAGE('Machine offline', 'The agent on this machine is not connected. Start it with: dialout start'));
+    } else if (result === 'timeout') {
+      res.writeHead(504, { 'Content-Type': 'text/html' });
+      res.end(PLACEHOLDER_PAGE(
+        'The machine did not answer in time',
+        `The agent is connected, but <strong>${tunnelOpts.baseUrl || `localhost:${tunnelOpts.port}`}</strong> `
+        + `took longer than ${TUNNEL_TIMEOUT_MS / 1000} seconds to respond. A dev server compiling a route for `
+        + 'the first time is the usual reason — reload and it is normally quicker.'
+      ));
     } else if (result.status === 502) {
       // Local server not running — show placeholder
       const bodyText = result.body ? Buffer.from(result.body, 'base64').toString('utf-8') : '';
@@ -1641,7 +1678,7 @@ server.on('request', async (req, res) => {
       // Add CORS headers for browser access
       resHeaders['access-control-allow-origin'] = '*';
 
-      // For HTML responses, inject <base> tag so relative URLs route through tunnel
+      // Decide whether this body is text we can safely rewrite.
       const contentType = (resHeaders['content-type'] || '').toLowerCase();
       let bodyBuf = result.body ? Buffer.from(result.body, 'base64') : null;
 
@@ -1652,20 +1689,99 @@ server.on('request', async (req, res) => {
       );
       if (shouldRewrite) {
         let text = bodyBuf!.toString('utf-8');
-        // Rewrite absolute paths so assets/API calls route through tunnel
+
+        // Rewrite absolute paths so assets and API calls route through the
+        // tunnel rather than resolving against this server's root.
+        //
+        // `/_next/` and `/api/` were the only two prefixes handled, which
+        // covered a Next.js app's framework chunks and nothing else. Every
+        // other root-absolute reference — /images/hero.png, /styles/site.css,
+        // /fonts/*.woff2, /favicon.ico, a plain <img src="/logo.svg"> — hit
+        // this server instead of the machine and came back 404. That is the
+        // "stylesheets and images missing" case.
+        const alreadyTunneled = (p: string) => p.startsWith(tunnelBase + '/');
+
+        if (contentType.includes('text/html')) {
+          // HTML is rewritten by attribute rather than by blanket search. The
+          // set below is every attribute that takes a URL and can be
+          // root-absolute; a blanket "/..." replace would also hit body text
+          // and inline JSON, which is how a rewrite starts corrupting content.
+          text = text.replace(
+            /\b(src|href|action|formaction|poster|data-src|ping)=(["'])(\/(?!\/)[^"']*)\2/gi,
+            (m, attr, q, path) => (alreadyTunneled(path) ? m : `${attr}=${q}${tunnelBase}${path}${q}`),
+          );
+          // srcset and imagesrcset are comma-separated "url descriptor" pairs,
+          // so they need splitting rather than a single substitution.
+          text = text.replace(
+            /\b(srcset|imagesrcset)=(["'])([^"']*)\2/gi,
+            (m, attr, q, list) => {
+              const rewritten = String(list).split(',').map((entry) => {
+                const t = entry.trim();
+                if (!t.startsWith('/') || t.startsWith('//')) return entry;
+                const sp = t.indexOf(' ');
+                const url = sp === -1 ? t : t.slice(0, sp);
+                const rest = sp === -1 ? '' : t.slice(sp);
+                return alreadyTunneled(url) ? entry : ` ${tunnelBase}${url}${rest}`;
+              }).join(',');
+              return `${attr}=${q}${rewritten.trim()}${q}`;
+            },
+          );
+        }
+
+        // CSS url(/...) — background images, @font-face sources, masks. Applies
+        // to a stylesheet and to any <style> block inside the HTML above.
+        text = text.replace(
+          /url\(\s*(["']?)(\/(?!\/)[^"')]*)\1\s*\)/gi,
+          (m, q, path) => (alreadyTunneled(path) ? m : `url(${q}${tunnelBase}${path}${q})`),
+        );
+
+        // JavaScript keeps the narrow prefix list on purpose. Every "/..."
+        // string literal in a bundle is not a URL — plenty are route patterns,
+        // regex fragments and data — and rewriting them all breaks the app in
+        // ways that are far harder to spot than a missing image. Anything the
+        // bundle builds at runtime is caught by the injected script instead.
         text = text.replace(/(["'(=])\/_next\//g, `$1${tunnelBase}/_next/`);
         text = text.replace(/(["'(=])\/api\//g, `$1${tunnelBase}/api/`);
+        text = text.replace(/(["'(=])\/static\//g, `$1${tunnelBase}/static/`);
+        text = text.replace(/(["'(=])\/assets\//g, `$1${tunnelBase}/assets/`);
 
         // For HTML: inject tunnel navigation script to handle all routes
         if (contentType.includes('text/html')) {
-          const tunnelScript = `<script>(function(){var B="${tunnelBase}";`
-            + `var F=window.fetch;window.fetch=function(u,o){if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;if(u instanceof Request){var nu=u.url;if(nu.startsWith("/")&&!nu.startsWith(B)){u=new Request(B+nu,u)}}return F.call(this,u,o)};`
-            + `var P=history.pushState;history.pushState=function(s,t,u){if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;return P.call(this,s,t,u)};`
-            + `var R=history.replaceState;history.replaceState=function(s,t,u){if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;return R.call(this,s,t,u)};`
-            + `document.addEventListener("click",function(e){var a=e.target.closest("a");if(a){var h=a.getAttribute("href");if(h&&h.startsWith("/")&&!h.startsWith(B)&&!h.startsWith("//")){ e.preventDefault();window.location.href=B+h;}}},true);`
-            + `var X=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;return X.apply(this,arguments)};`
-            + `var N=window.Navigation;if(N&&N.prototype){var nv=N.prototype.navigate;N.prototype.navigate=function(u,o){if(typeof u==="string"&&u.startsWith("/")&&!u.startsWith(B))u=B+u;return nv.call(this,u,o)}}`
-            + `if(window.navigation){try{window.navigation.addEventListener("navigate",function(e){var u=new URL(e.destination.url);if(u.pathname.startsWith("/")&&!u.pathname.startsWith(B)){e.preventDefault();window.location.href=B+u.pathname+u.search+u.hash}})}catch(ex){}}`
+          // Runtime patching, for every URL the page builds after it loads.
+          //
+          // A text rewrite can only reach paths that exist as literals in the
+          // markup or the bundle. Anything assembled at runtime — a chunk
+          // injected with document.createElement("script"), an Image() whose
+          // src is set from data, a stylesheet appended by a component — is
+          // built after this file was rewritten and points straight at this
+          // server's root. Patching the property setters is what catches those,
+          // and it is the half that was missing.
+          const tunnelScript = `<script>(function(){var B=${JSON.stringify(tunnelBase)};`
+            + `function fix(u){if(typeof u!=="string")return u;if(u.charAt(0)!=="/"||u.charAt(1)==="/")return u;if(u.indexOf(B+"/")===0)return u;return B+u}`
+            // fetch, in both its string and Request forms.
+            + `var F=window.fetch;window.fetch=function(u,o){if(typeof u==="string")u=fix(u);else if(u instanceof Request){var nu=u.url;var p=nu.replace(location.origin,"");if(p!==nu||nu.charAt(0)==="/"){var f=fix(p);if(f!==p)u=new Request(f,u)}}return F.call(this,u,o)};`
+            + `var X=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=fix(u);return X.apply(this,arguments)};`
+            // The property setters. This is what makes dynamically injected
+            // scripts, images, stylesheets and media resolve correctly.
+            + `function patch(C,prop){if(!C||!C.prototype)return;var d=Object.getOwnPropertyDescriptor(C.prototype,prop);if(!d||!d.set)return;Object.defineProperty(C.prototype,prop,{get:d.get,set:function(v){d.set.call(this,fix(v))},configurable:true,enumerable:d.enumerable})}`
+            + `patch(window.HTMLScriptElement,"src");patch(window.HTMLImageElement,"src");patch(window.HTMLLinkElement,"href");`
+            + `patch(window.HTMLSourceElement,"src");patch(window.HTMLMediaElement,"src");patch(window.HTMLIFrameElement,"src");patch(window.HTMLTrackElement,"src");`
+            // setAttribute covers frameworks that set attributes rather than
+            // properties, and the srcset lists the property setters never see.
+            + `var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(n,v){var k=String(n).toLowerCase();`
+            + `if(k==="src"||k==="href"||k==="action"||k==="formaction"||k==="poster"||k==="ping")v=fix(v);`
+            + `else if(k==="srcset"||k==="imagesrcset")v=String(v).split(",").map(function(e){var t=e.trim();if(!t)return e;var sp=t.indexOf(" ");var u=sp===-1?t:t.slice(0,sp);var r=sp===-1?"":t.slice(sp);return fix(u)+r}).join(", ");`
+            + `return SA.call(this,n,v)};`
+            // History and navigation.
+            + `var P=history.pushState;history.pushState=function(s,t,u){if(u!=null)arguments[2]=fix(u);return P.apply(this,arguments)};`
+            + `var R=history.replaceState;history.replaceState=function(s,t,u){if(u!=null)arguments[2]=fix(u);return R.apply(this,arguments)};`
+            + `document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a"):null;if(a){var h=a.getAttribute("href");if(h){var f=fix(h);if(f!==h){e.preventDefault();window.location.href=f}}}},true);`
+            + `if(window.navigation){try{window.navigation.addEventListener("navigate",function(e){var u=new URL(e.destination.url);var f=fix(u.pathname);if(f!==u.pathname){e.preventDefault();window.location.href=f+u.search+u.hash}})}catch(ex){}}`
+            // EventSource and WebSocket, so a dev server's hot-reload channel
+            // aims at the tunnel instead of at this server's root. It may still
+            // not connect through the proxy, but a 404 fails fast where a
+            // wrong-origin request hangs.
+            + `if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(fix(u),o)};window.EventSource.prototype=ES.prototype;}`
             + `})()</script>`;
           // Inject right after <head> so it runs before any async scripts
           if (text.includes('<head>')) {
@@ -1676,13 +1792,22 @@ server.on('request', async (req, res) => {
         }
 
         bodyBuf = Buffer.from(text, 'utf-8');
-        if (resHeaders['content-length']) {
-          resHeaders['content-length'] = String(bodyBuf.length);
-        }
       }
 
-      // Remove content-encoding since we decoded the body
+      // content-encoding is dropped because the agent's fetch already
+      // decompressed the body, and content-length is recomputed from the bytes
+      // actually being sent rather than trusted from upstream.
+      //
+      // It used to be recomputed only on the rewrite path, which left every
+      // other response carrying the length upstream reported. For anything the
+      // agent decompressed, or any body a rewrite lengthened, that number was
+      // wrong and the browser truncated the response at it — a stylesheet
+      // cut off mid-rule, an image that never finished decoding.
       delete resHeaders['content-encoding'];
+      delete resHeaders['Content-Encoding'];
+      delete resHeaders['content-length'];
+      delete resHeaders['Content-Length'];
+      if (bodyBuf) resHeaders['content-length'] = String(bodyBuf.length);
 
       res.writeHead(result.status, resHeaders);
       if (bodyBuf) {
