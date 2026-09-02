@@ -9,6 +9,14 @@ All notable changes to the Dialout agent are documented here.
 > would have implied a history nobody could read. The 2.x entries are kept
 > because the code is the same lineage and the reasoning in them still applies.
 
+## [1.2.1] - 2026-09-02
+
+- **docs: the scope-override troubleshooting note no longer names the retired
+  internal registry.** The advice stays — a stale `@indianic:registry` line in
+  `~/.npmrc` is exactly why this package 404s on a company machine — but it now
+  gives the two `npm config` commands to check and clear it, which is what
+  anyone hitting it actually needs.
+
 ## [1.2.0] - 2026-09-02
 
 **The package is now `@indianic/dialout`. `dialout` is deprecated.**
