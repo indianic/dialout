@@ -11,6 +11,14 @@ All notable changes to the Dialout agent are documented here.
 
 ## [1.1.1] - 2026-09-02
 
+> **`@indianic/dialout` also exists from this release on.** It is an alias — a
+> four-kilobyte package whose only content is a dependency on `dialout` and a
+> one-line shim that runs it — published so the agent resolves under the
+> organisation's namespace. **`dialout` remains the real package and the
+> documented install.** Install one or the other, never both: they provide the
+> same `dialout` command and npm refuses to overwrite an existing binary.
+
+
 - **docs: the release history is now written down and linked.** Entries for
   1.0.0, 1.0.1 and 1.1.0 were missing entirely, so the file jumped from 2.7.4
   straight past three published releases — and read as though the version had
