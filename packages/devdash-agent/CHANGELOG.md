@@ -1,6 +1,98 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to the Dialout agent are documented here.
+
+> **Why the numbers go backwards.** Entries below `1.0.0` are numbered `2.x`.
+> The agent shipped privately as `@indianic/devdash-agent` and reached 2.7.4
+> before the open-source release, which renamed it to **`dialout`** and reset
+> the version to 1.0.0 — a new package on a public registry starting at 2.7.5
+> would have implied a history nobody could read. The 2.x entries are kept
+> because the code is the same lineage and the reasoning in them still applies.
+
+## [1.1.1] - 2026-09-02
+
+- **docs: the release history is now written down and linked.** Entries for
+  1.0.0, 1.0.1 and 1.1.0 were missing entirely, so the file jumped from 2.7.4
+  straight past three published releases — and read as though the version had
+  gone backwards with no explanation. Added, along with a note at the top
+  explaining the reset from 2.7.4 to 1.0.0 at the open-source release.
+
+  Docs only; no change to the agent's behaviour. It is published because npm
+  renders a package page from the README of the latest version, so the
+  changelog link only appears there after a release.
+
+## [1.1.0] - 2026-09-01
+
+- **fix(tunnel): split large response bodies across several WebSocket frames.**
+  A 7.6 MB dev-server chunk base64-encodes to about 10.1 MB, and a frame that
+  size did not survive the hop from the agent to the server: the request never
+  completed and timed out, while every smaller asset on the same socket went
+  through. In a browser this looked like a routing bug — the page and its small
+  chunks loaded and one big one did not — and because a browser requests several
+  scripts at once, the large one starved the others, so *which* files failed
+  changed between reloads.
+
+  Bodies over the threshold the server advertises (256 KB of base64) are now
+  sent as indexed `http_response_chunk` frames followed by an `http_response`
+  carrying the count. The server reassembles by index, so out-of-order delivery
+  cannot scramble an asset, and refuses a short delivery rather than serving a
+  truncated file.
+
+  **Version skew is safe in both directions.** The threshold arrives on each
+  `http_request`; an agent that does not read the field sends one frame exactly
+  as before, and this agent talking to an older server never sees the field and
+  never chunks. Neither combination is worse than it was.
+
+  Needs a server running the matching release. Against an older server, large
+  bodies keep failing the way they do today.
+
+## [1.0.1] - 2026-09-01
+
+- **docs: rewrite the package README for someone who has never seen this.**
+  It opened at "generate a machine key", assuming a reader who already had an
+  account, a registered machine and a key in hand. It now covers the whole
+  path: get a server, create an account, add the machine, install, paste the
+  key, verify.
+- **docs: correct what the rename sweep broke.** The README claimed the package
+  was "renamed from `dialout` to `dialout`" (both sides had collapsed to the
+  same name), documented `com.devdash.agent` plists when the code ships
+  `com.dialout.agent`, pointed at a retired hostname, and declared
+  `UNLICENSED — IndiaNIC proprietary` at the foot of an MIT package. It also
+  listed 13 of the 19 CLI commands; all 19 are now documented.
+- **docs: drop the release instructions.** The README documented a private
+  registry client and a wrapper script that no longer exists, and which no
+  consumer of this package could use anyway.
+- **chore: fill in the package metadata** — author, contributors, bugs address
+  and a wider keyword set — and remove three `npm run release*` scripts that
+  pointed at a deleted file.
+
+## [1.0.0] - 2026-09-01
+
+The open-source release. Published to the public npm registry as **`dialout`**,
+MIT licensed. Previously `@indianic/devdash-agent` on a private registry.
+
+- **feat: renamed throughout.** The binary is `dialout`. Configuration moves to
+  `~/.dialout`, and an existing `~/.devdash-agent` is **copied** rather than
+  moved on first run, so an older agent still installed elsewhere keeps working
+  and nobody has to re-`init`.
+- **feat: service identifiers renamed** — `com.dialout.agent` for launchd, a
+  `dialout` systemd unit, and a `# dialout-watchdog` cron marker. The cowork
+  shell-rc block and the ssh-config block are renamed too, and removal still
+  recognises the old markers, because those blocks live in files the user owns.
+- **fix: `init` installs the service it says it installs.** It offered to set up
+  a service and then wrote a per-user LaunchAgent, which starts at *login* —
+  so a machine you were trying to reach remotely was unreachable until someone
+  sat down at it. `init` now asks the same login-or-boot question
+  `install-service` does.
+- **fix: a 401 on connect names the server that refused.** The prompt could show
+  one server while the saved configuration pointed at another, and the error
+  said neither.
+- **chore: `@dialout/shared` is bundled into the tarball.** A `prepack` step
+  stages it into the package's own `node_modules`, because `bundleDependencies`
+  packs from there and not from the workspace symlink. Without it the published
+  package required something that existed only inside the repository.
+- **chore: licence changed to MIT.**
+
 ## [2.7.4] - 2026-08-22
 
 - fix(agent): git and ssh to a LAN host failed inside every tmux session on macOS 26+ with

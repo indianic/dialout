@@ -387,6 +387,14 @@ Native **iOS and Android** apps are coming soon to the App Store and Google
 Play. Until then the web dashboard installs as a PWA — *Add to Home Screen* —
 with push notifications on both platforms today.
 
+## Changelog
+
+Release history is in
+[CHANGELOG.md](https://github.com/indianic/dialout/blob/main/packages/devdash-agent/CHANGELOG.md).
+Note that entries below 1.0.0 are numbered 2.x: the agent shipped privately as
+`@indianic/devdash-agent` and reached 2.7.4 before the open-source release reset
+it to 1.0.0.
+
 ## Contributing and issues
 
 The whole project is open source at

@@ -1,6 +1,6 @@
 {
   "name": "dialout",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Dialout agent — reach your office, home or build machine from any browser or phone. Remote tmux terminals, live port checks, filesystem browsing, process control and HTTP tunnels. The agent dials out: no inbound ports, no VPN, no port forwarding.",
   "bin": {
     "dialout": "./bin/devdash-agent.js"

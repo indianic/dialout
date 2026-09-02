@@ -472,6 +472,12 @@ settings that matter most when the thing faces the internet.
 | `packages/devdash-shared` | Types shared by server, agent and mobile |
 | `packages/devdash-mobile` | The Expo app |
 
+## Changelog
+
+[CHANGELOG.md](CHANGELOG.md) for the server and dashboard;
+[the agent keeps its own](packages/devdash-agent/CHANGELOG.md), because it is
+versioned and published separately.
+
 ## Contributing
 
 [CONTRIBUTING.md](CONTRIBUTING.md) is short on ceremony and long on the specific
