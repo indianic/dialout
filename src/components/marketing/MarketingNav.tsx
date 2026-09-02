@@ -8,6 +8,7 @@ import GithubIcon from './GithubIcon';
 import { Logo } from './Logo';
 import { GITHUB_URL } from '@/lib/marketing-content';
 import { useSignupPolicy, signupCta, type SignupPolicy } from '@/hooks/useSignupPolicy';
+import { useSignedIn } from '@/hooks/useSignedIn';
 
 /**
  * Navigation is deliberately short. Everything that is not one of these lives
@@ -31,6 +32,12 @@ export default function MarketingNav({ initialPolicy }: { initialPolicy?: Signup
   // in to offer, and the button falls back to the thing that is always true:
   // the code is public and you can run it yourself.
   const cta = signupCta(useSignupPolicy(initialPolicy));
+
+  // Someone already signed in does not need a way to sign in or sign up — they
+  // need a way back to their machines. `null` while the answer is in flight, so
+  // the button appears once rather than flipping label after hydration.
+  const signedIn = useSignedIn();
+  const DASHBOARD = '/projects';
 
   const isOn = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
@@ -68,17 +75,29 @@ export default function MarketingNav({ initialPolicy }: { initialPolicy?: Signup
             <GithubIcon size={15} />
             GitHub
           </a>
-          <Link href="/login" className="mk-nav-link">
-            Log in
-          </Link>
+          {signedIn === false ? (
+            <Link href="/login" className="mk-nav-link">
+              Log in
+            </Link>
+          ) : null}
           </span>
-          <Link
-            href={cta ? cta.href : '/docs/quick-start'}
-            className="mk-cta"
-            style={{ padding: '9px 16px', fontSize: 14 }}
-          >
-            {cta ? cta.label : 'Get started'}
-          </Link>
+          {/* Reserve the slot while the answer is unknown, so the row does not
+              reflow when the button arrives. */}
+          {signedIn === null ? (
+            <span aria-hidden="true" style={{ display: 'inline-block', minWidth: 118 }} />
+          ) : signedIn ? (
+            <Link href={DASHBOARD} className="mk-cta" style={{ padding: '9px 16px', fontSize: 14 }}>
+              Dashboard
+            </Link>
+          ) : (
+            <Link
+              href={cta ? cta.href : '/docs/quick-start'}
+              className="mk-cta"
+              style={{ padding: '9px 16px', fontSize: 14 }}
+            >
+              {cta ? cta.label : 'Get started'}
+            </Link>
+          )}
 
           <button
             type="button"
@@ -105,14 +124,22 @@ export default function MarketingNav({ initialPolicy }: { initialPolicy?: Signup
                 {l.label}
               </Link>
             ))}
-            <Link href="/login" className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
-              Log in
-            </Link>
-            {cta ? (
-              <Link href={cta.href} className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
-                {cta.label}
+            {signedIn ? (
+              <Link href={DASHBOARD} className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
+                Dashboard
               </Link>
-            ) : null}
+            ) : (
+              <>
+                <Link href="/login" className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
+                  Log in
+                </Link>
+                {cta ? (
+                  <Link href={cta.href} className="mk-foot-link" style={{ fontSize: 15, padding: '9px 0' }} onClick={() => setOpen(false)}>
+                    {cta.label}
+                  </Link>
+                ) : null}
+              </>
+            )}
           </div>
         ) : null}
       </div>
