@@ -20,7 +20,7 @@ import { acquireSingleInstanceLock } from './single-instance';
 const config = loadConfig();
 
 if (!config.serverUrl || !config.apiKey) {
-  console.error('[devdash-agent] Not configured. Run: devdash-agent init');
+  console.error('[dialout] Not configured. Run: dialout init');
   process.exit(1);
 }
 
@@ -29,26 +29,26 @@ if (!config.serverUrl || !config.apiKey) {
 // aside here instead of opening a second socket on the same key (which the
 // server would drop with close 1006, flapping both). See single-instance.ts.
 if (!acquireSingleInstanceLock(config.serverUrl)) {
-  console.log(`[devdash-agent] Already running for ${config.serverUrl} — exiting (single instance).`);
+  console.log(`[dialout] Already running for ${config.serverUrl} — exiting (single instance).`);
   process.exit(0);
 }
 
-console.log(`[devdash-agent] Starting...`);
-console.log(`[devdash-agent] Server: ${config.serverUrl}`);
+console.log(`[dialout] Starting...`);
+console.log(`[dialout] Server: ${config.serverUrl}`);
 
 connect(config, () => {
-  console.log('[devdash-agent] Ready');
+  console.log('[dialout] Ready');
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n[devdash-agent] Shutting down...');
+  console.log('\n[dialout] Shutting down...');
   disconnect();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('[devdash-agent] Shutting down...');
+  console.log('[dialout] Shutting down...');
   disconnect();
   process.exit(0);
 });

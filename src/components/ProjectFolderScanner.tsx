@@ -82,7 +82,7 @@ export default function ProjectFolderScanner() {
       if (!r.ok) {
         setError(
           data.error === 'Machine offline'
-            ? 'Machine offline — start the devdash-agent on this machine and try again.'
+            ? 'Machine offline — start the dialout on this machine and try again.'
             : data.error || 'Scan failed'
         );
       } else {
@@ -197,7 +197,7 @@ export default function ProjectFolderScanner() {
 
       {!online && (
         <p className="text-[12.5px] mt-2" style={{ color: 'var(--offline)' }}>
-          This machine&apos;s agent is offline — start <code className="font-mono">devdash-agent</code> to scan folders.
+          This machine&apos;s agent is offline — start <code className="font-mono">dialout</code> to scan folders.
         </p>
       )}
       {error && (

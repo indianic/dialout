@@ -1,5 +1,5 @@
-export declare const SSH_LN_BEGIN = "# >>> devdash ssh local-network workaround >>>";
-export declare const SSH_LN_END = "# <<< devdash ssh local-network workaround <<<";
+export declare const SSH_LN_BEGIN = "# >>> dialout ssh local-network workaround >>>";
+export declare const SSH_LN_END = "# <<< dialout ssh local-network workaround <<<";
 export declare const DEFAULT_CONNECT_TIMEOUT = 15;
 /**
  * Only macOS gates local-network access this way; on Linux the block would be

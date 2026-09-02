@@ -99,7 +99,7 @@ program
     $ dialout update                  # update to latest version
     $ dialout --version               # show current version
 
-  Config file: ~/.devdash-agent/config.json
+  Config file: ~/.dialout/config.json
   Docs: https://www.dialout.dev/docs/agent`)
     .version(pkg.version);
 // Helper: readline question
@@ -270,10 +270,25 @@ program
     console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
     console.log('');
     // Step 1: Which server? Saved as a named profile so local and remote
-    // configs coexist — switch anytime with "devdash-agent use <profile>".
+    // configs coexist — switch anytime with "dialout use <profile>".
+    // Work out what "Remote" will actually default to BEFORE drawing the menu.
+    // Printing DEFAULT_SERVER_URL on the menu line and then defaulting the next
+    // prompt to a different saved URL is how someone ends up validating a key
+    // for one server against another and getting an unexplained 401.
+    const savedRemote = config.profiles?.remote?.serverUrl;
+    // A localhost URL saved in the "remote" profile is leftover from local
+    // testing — choosing Remote must always default to a real remote server.
+    const remoteDefault = savedRemote && !/^wss?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/.test(savedRemote)
+        ? savedRemote
+        : config_1.DEFAULT_SERVER_URL;
+    const remoteIsSaved = remoteDefault !== config_1.DEFAULT_SERVER_URL;
     console.log('\x1b[1mWhere should this agent connect?\x1b[0m');
     console.log('');
-    console.log(`  \x1b[36m1)\x1b[0m Remote server — ${config_1.DEFAULT_SERVER_URL}`);
+    console.log(`  \x1b[36m1)\x1b[0m Remote server — ${remoteDefault}` +
+        (remoteIsSaved ? ' \x1b[90m(saved)\x1b[0m' : ''));
+    if (remoteIsSaved) {
+        console.log(`     \x1b[90mthis build ships with ${config_1.DEFAULT_SERVER_URL} — pick 3 to switch\x1b[0m`);
+    }
     console.log(`  \x1b[36m2)\x1b[0m Local dev     — ${config_1.DEFAULT_LOCAL_SERVER_URL} (Dialout running on this machine)`);
     console.log('  \x1b[36m3)\x1b[0m Custom URL');
     console.log('');
@@ -290,13 +305,7 @@ program
     }
     else {
         profileName = 'remote';
-        // A localhost URL saved in the "remote" profile is leftover from local
-        // testing — choosing Remote must always default to a real remote server.
-        const savedRemote = config.profiles?.remote?.serverUrl;
-        defaultUrl =
-            savedRemote && !/^wss?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/.test(savedRemote)
-                ? savedRemote
-                : config_1.DEFAULT_SERVER_URL;
+        defaultUrl = remoteDefault;
     }
     const serverUrlInput = await ask(rl, `Server URL [\x1b[36m${defaultUrl}\x1b[0m]: `);
     const serverUrl = (serverUrlInput.trim() || defaultUrl).replace(/\/$/, '');
@@ -319,6 +328,18 @@ program
     const result = await validateKeyViaWS(serverUrl, apiKey);
     if (!result.valid) {
         console.error(`\x1b[31mValidation failed: ${result.error}\x1b[0m`);
+        // A 401 here means the key is not registered on THIS server — not that
+        // the agent is misconfigured. It is almost always a key issued by one
+        // server being offered to another, so name the server that refused it
+        // rather than leaving the reader to guess from a bare status code.
+        if (/\b401\b/.test(result.error || '')) {
+            console.error('');
+            console.error(`  The server at \x1b[36m${serverUrl}\x1b[0m does not recognise that key.`);
+            console.error('  Keys are issued per server, so a key from one Dialout server is');
+            console.error('  rejected by another. Check you are pointing at the right one, and');
+            console.error('  generate a key there under Settings → Machines.');
+        }
+        console.error('');
         const retry = await ask(rl, 'Save config anyway? (y/N): ');
         if (retry.toLowerCase() !== 'y') {
             rl.close();
@@ -334,36 +355,42 @@ program
     console.log(`Config file: ${(0, config_1.getConfigPath)()}`);
     const otherProfiles = Object.keys(saved.profiles || {}).filter((n) => n !== profileName);
     if (otherProfiles.length > 0) {
-        console.log(`Switch anytime: devdash-agent use ${otherProfiles[0]}`);
+        console.log(`Switch anytime: dialout use ${otherProfiles[0]}`);
     }
     // Step 4: Ask how to start
     console.log('');
     console.log('\x1b[1mHow would you like to run the agent?\x1b[0m');
     console.log('');
     console.log('  \x1b[36m1)\x1b[0m Foreground    — run now in this terminal (for testing)');
-    console.log('  \x1b[36m2)\x1b[0m Service       — auto-start on boot (launchd/systemd)');
+    console.log('  \x1b[36m2)\x1b[0m Service       — start automatically (launchd/systemd; asks boot vs login)');
     console.log('  \x1b[36m3)\x1b[0m Cron Watchdog — auto-restart if it dies (cron job)');
     console.log('  \x1b[36m4)\x1b[0m Skip          — configure later');
     console.log('');
     const choice = await ask(rl, 'Choose [1-4]: ');
+    // Closed here because every branch below opens its own reader when it
+    // needs one; leaving this one open would keep the process alive.
     rl.close();
     switch (choice.trim()) {
         case '1':
             console.log('\n\x1b[90mStarting in foreground (Ctrl+C to stop)...\x1b[0m\n');
             (0, websocket_1.connect)(config, () => {
-                console.log('[devdash-agent] Connected and ready.');
+                console.log('[dialout] Connected and ready.');
             });
             process.on('SIGINT', () => { (0, websocket_1.disconnect)(); process.exit(0); });
             process.on('SIGTERM', () => { (0, websocket_1.disconnect)(); process.exit(0); });
             break;
-        case '2':
-            (0, service_installer_1.installService)();
+        case '2': {
+            // Same decision, and the same follow-up, as `install-service`.
+            const system = await chooseServiceScope();
+            (0, service_installer_1.installService)({ system });
+            applySshLocalNetworkWorkaround();
             // Check if cron should also be set up
             if (!(0, service_installer_1.isCronInstalled)()) {
                 console.log('\n\x1b[33mTip:\x1b[0m Add a cron watchdog for extra reliability:');
-                console.log('  devdash-agent setup-cron');
+                console.log('  dialout setup-cron');
             }
             break;
+        }
         case '3': {
             const intervalStr = await (async () => {
                 const rl2 = createRL();
@@ -390,10 +417,41 @@ program
         }
         case '4':
         default:
-            console.log('\nRun "devdash-agent start" when ready.');
+            console.log('\nRun "dialout start" when ready.');
             break;
     }
 });
+/**
+ * Decide whether a service install is a boot service or a per-user one.
+ *
+ * Shared by `init` and `install-service` on purpose. They used to disagree:
+ * `init` offered "Service — auto-start on boot" and then called
+ * installService() with no arguments, which installs the per-user LaunchAgent
+ * that only starts at LOGIN. Someone following the first-run prompt got a
+ * weaker service than the one they were promised, and only found out by
+ * rebooting and noticing the agent was not there.
+ */
+async function chooseServiceScope() {
+    if (process.platform === 'linux' && (0, service_installer_1.defaultLinuxScope)() === 'system') {
+        // Root on Linux: no password to pay and nothing to weigh.
+        console.log('Running as root — installing the boot service (starts at boot, survives logout).');
+        console.log('Use --login for a per-user service instead.\n');
+        return true;
+    }
+    if (!process.stdin.isTTY) {
+        // Non-interactive: the per-user service is the only one installable
+        // without a password.
+        return false;
+    }
+    const rl = createRL();
+    const answer = await ask(rl, 'Start the agent at boot, before you log in? Requires admin password. [y/N]: ');
+    rl.close();
+    const system = /^y(es)?$/i.test(answer.trim());
+    if (!system && process.platform === 'linux') {
+        console.log('Installing the per-user service — lingering will be enabled so it survives logout.');
+    }
+    return system;
+}
 // --- profiles ---
 program
     .command('profiles')
@@ -402,7 +460,7 @@ program
     const config = (0, config_1.loadConfig)();
     const names = Object.keys(config.profiles || {});
     if (names.length === 0) {
-        console.log('No profiles saved yet. Run: devdash-agent init');
+        console.log('No profiles saved yet. Run: dialout init');
         return;
     }
     console.log('');
@@ -415,7 +473,7 @@ program
         console.log(`  ${marker} ${name.padEnd(10)} ${p.serverUrl}  \x1b[90m(key ****${p.apiKey.slice(-4)})\x1b[0m${active ? '  \x1b[32mactive\x1b[0m' : ''}`);
     }
     console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
-    console.log('Switch with: devdash-agent use <name>');
+    console.log('Switch with: dialout use <name>');
     console.log('');
 });
 // --- use ---
@@ -433,12 +491,12 @@ program
     if (!profile) {
         const names = Object.keys(config.profiles || {});
         console.error(`Unknown profile: ${name}`);
-        console.error(names.length ? `Available: ${names.join(', ')}` : 'No profiles yet — run: devdash-agent init');
+        console.error(names.length ? `Available: ${names.join(', ')}` : 'No profiles yet — run: dialout init');
         process.exit(1);
     }
     (0, config_1.saveProfile)(name, profile, true);
     console.log(`Active profile: \x1b[36m${name}\x1b[0m → ${profile.serverUrl}`);
-    console.log('If the agent is running, apply with: devdash-agent restart');
+    console.log('If the agent is running, apply with: dialout restart');
 });
 // --- start ---
 program
@@ -448,10 +506,10 @@ program
     .option('--profile <name>', 'Use a saved profile for this run only (active profile unchanged)')
     .addHelpText('after', `
   Modes:
-    devdash-agent start           Foreground — logs to terminal, Ctrl+C to stop
-    devdash-agent start --daemon  Background — forks process, use "stop" to end
-    devdash-agent install-service Permanent  — auto-starts on boot (launchd/systemd)
-    devdash-agent setup-cron      Watchdog   — cron checks every N minutes, restarts if dead
+    dialout start           Foreground — logs to terminal, Ctrl+C to stop
+    dialout start --daemon  Background — forks process, use "stop" to end
+    dialout install-service Permanent  — auto-starts on boot (launchd/systemd)
+    dialout setup-cron      Watchdog   — cron checks every N minutes, restarts if dead
 
   Examples:
     $ dialout start                    # test connection in foreground
@@ -464,14 +522,14 @@ program
     if (opts.profile) {
         if (!config.profiles?.[opts.profile]) {
             console.error(`Unknown profile: ${opts.profile}`);
-            console.error(`Available: ${Object.keys(config.profiles || {}).join(', ') || '(none — run: devdash-agent init)'}`);
+            console.error(`Available: ${Object.keys(config.profiles || {}).join(', ') || '(none — run: dialout init)'}`);
             process.exit(1);
         }
         config = (0, config_1.applyProfile)(config, opts.profile);
-        console.log(`[devdash-agent] Using profile "${opts.profile}" → ${config.serverUrl}`);
+        console.log(`[dialout] Using profile "${opts.profile}" → ${config.serverUrl}`);
     }
     if (!config.serverUrl || !config.apiKey) {
-        console.error('Not configured. Run: devdash-agent init');
+        console.error('Not configured. Run: dialout init');
         process.exit(1);
     }
     if (opts.daemon) {
@@ -510,24 +568,24 @@ program
             catch { }
             console.error('\x1b[33mThe agent exited immediately.\x1b[0m');
             console.error('Usually this means another supervisor is already running it for this server URL.');
-            console.error('Check what is running:  devdash-agent status');
+            console.error('Check what is running:  dialout status');
             process.exit(1);
         }
         console.log(`Agent started in background (PID: ${child.pid})`);
-        console.log('Stop with: devdash-agent stop');
+        console.log('Stop with: dialout stop');
         // Suggest cron if not installed
         if (!(0, service_installer_1.isCronInstalled)() && !(0, service_installer_1.isServiceInstalled)()) {
-            console.log('\n\x1b[33mTip:\x1b[0m Set up auto-restart with: devdash-agent setup-cron');
+            console.log('\n\x1b[33mTip:\x1b[0m Set up auto-restart with: dialout setup-cron');
         }
         process.exit(0);
     }
     // Foreground mode
-    console.log('[devdash-agent] Starting in foreground (Ctrl+C to stop)...');
+    console.log('[dialout] Starting in foreground (Ctrl+C to stop)...');
     (0, websocket_1.connect)(config, () => {
-        console.log('[devdash-agent] Connected and ready.');
+        console.log('[dialout] Connected and ready.');
     });
     process.on('SIGINT', () => {
-        console.log('\n[devdash-agent] Stopping...');
+        console.log('\n[dialout] Stopping...');
         (0, websocket_1.disconnect)();
         process.exit(0);
     });
@@ -541,13 +599,13 @@ program
     .command('stop')
     .description('Stop the background agent (started with --daemon)')
     .addHelpText('after', `
-  Stops the agent that was started with "devdash-agent start --daemon".
+  Stops the agent that was started with "dialout start --daemon".
   Has no effect on service-installed agents — use uninstall-service for those.`)
     .action(() => {
     const pidFile = (0, config_1.getPidFile)();
     if (!fs.existsSync(pidFile)) {
         console.log('No running agent found.');
-        console.log('If running as service: devdash-agent uninstall-service');
+        console.log('If running as service: dialout uninstall-service');
         return;
     }
     const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
@@ -571,7 +629,7 @@ program
     .description('Restart the background agent (stop + start --daemon)')
     .addHelpText('after', `
   Convenience command that stops any running daemon and starts a fresh one.
-  Equivalent to running "devdash-agent stop && devdash-agent start --daemon".
+  Equivalent to running "dialout stop && dialout start --daemon".
 
   Examples:
     $ dialout restart            # restart background agent
@@ -580,7 +638,7 @@ program
     await (0, update_check_1.checkForUpdate)();
     const config = (0, config_1.loadConfig)();
     if (!config.serverUrl || !config.apiKey) {
-        console.error('Not configured. Run: devdash-agent init');
+        console.error('Not configured. Run: dialout init');
         process.exit(1);
     }
     // Stop existing daemon if running
@@ -671,7 +729,7 @@ program
             console.log('\x1b[33m    systemd stops it when your last session ends — the agent dies every time you log out\x1b[0m');
             console.log('\x1b[33m    and only comes back when you log in again.\x1b[0m');
             console.log(`\x1b[33m    Fix:  sudo loginctl enable-linger ${user}\x1b[0m`);
-            console.log('\x1b[33m    Or:   devdash-agent install-service --system   (runs at boot, in system.slice)\x1b[0m');
+            console.log('\x1b[33m    Or:   dialout install-service --system   (runs at boot, in system.slice)\x1b[0m');
         }
     }
     for (const s of supervisors.filter((s) => s.stale)) {
@@ -686,11 +744,11 @@ program
             console.log(`  Process:   \x1b[32mrunning\x1b[0m (PID: ${svc.pid}, managed by ${svc.kind?.startsWith('launchd') ? 'launchd' : 'systemd'})`);
         }
         else {
-            console.log(`  Process:   \x1b[31mnot running\x1b[0m (service installed but stopped — check logs in ~/.devdash-agent/logs)`);
+            console.log(`  Process:   \x1b[31mnot running\x1b[0m (service installed but stopped — check logs in ~/.dialout/logs)`);
         }
     }
     else if (fs.existsSync(pidFile)) {
-        // Manual background mode (devdash-agent start --daemon)
+        // Manual background mode (dialout start --daemon)
         const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
         try {
             process.kill(pid, 0);
@@ -759,14 +817,14 @@ program
   Installs the agent as a system service so it starts automatically.
 
   Default (per-user, starts at LOGIN):
-    macOS  — LaunchAgent at ~/Library/LaunchAgents/com.devdash.agent.plist
-    Linux  — systemd user service at ~/.config/systemd/user/devdash-agent.service
+    macOS  — LaunchAgent at ~/Library/LaunchAgents/com.dialout.agent.plist
+    Linux  — systemd user service at ~/.config/systemd/user/dialout.service
 
   --system (starts at BOOT, before anyone logs in — requires sudo):
-    macOS  — LaunchDaemon at /Library/LaunchDaemons/com.devdash.agent.plist
-    Linux  — systemd system unit at /etc/systemd/system/devdash-agent.service
+    macOS  — LaunchDaemon at /Library/LaunchDaemons/com.dialout.agent.plist
+    Linux  — systemd system unit at /etc/systemd/system/dialout.service
 
-  Must run "devdash-agent init" first to configure server URL and API key.
+  Must run "dialout init" first to configure server URL and API key.
 
   With no flag on an interactive terminal, it asks whether to start at boot
   (sudo) or at login.
@@ -776,44 +834,16 @@ program
     $ dialout install-service --system   # start at boot (prompts for sudo)
     $ dialout install-service --login     # start at login, no prompt
 
-  To remove: devdash-agent uninstall-service`)
+  To remove: dialout uninstall-service`)
     .action(async (opts) => {
     const config = (0, config_1.loadConfig)();
     if (!config.serverUrl || !config.apiKey) {
-        console.error('Not configured. Run "devdash-agent init" first.');
+        console.error('Not configured. Run "dialout init" first.');
         process.exit(1);
     }
-    let system;
-    if (opts.system) {
-        system = true;
-    }
-    else if (opts.login) {
-        system = false;
-    }
-    else if (process.platform === 'linux' && (0, service_installer_1.defaultLinuxScope)() === 'system') {
-        // Root on Linux: there is nothing to weigh. The boot unit needs no sudo
-        // password (we already are root), starts before anyone logs in, and
-        // lives in system.slice where logging out cannot touch it. Asking
-        // "[y/N]" here offered a free upgrade at a fictional price and defaulted
-        // to the answer that dies on logout.
-        system = true;
-        console.log('Running as root — installing the boot service (starts at boot, survives logout).');
-        console.log('Use --login for a per-user service instead.\n');
-    }
-    else if (process.stdin.isTTY) {
-        const rl = createRL();
-        const answer = await ask(rl, 'Start the agent at boot, before you log in? Requires admin password. [y/N]: ');
-        rl.close();
-        system = /^y(es)?$/i.test(answer.trim());
-        if (!system && process.platform === 'linux') {
-            console.log('Installing the per-user service — lingering will be enabled so it survives logout.');
-        }
-    }
-    else {
-        // Non-interactive (piped/CI) and not root: the per-user service is the
-        // only one installable without a password. Lingering keeps it alive.
-        system = false;
-    }
+    // Explicit flags win; otherwise the same decision `init` makes, from the
+    // same helper, so the two prompts cannot drift apart again.
+    const system = opts.system ? true : opts.login ? false : await chooseServiceScope();
     (0, service_installer_1.installService)({ system });
     applySshLocalNetworkWorkaround();
     process.exit(0);
@@ -836,7 +866,7 @@ program
     // Exiting 0 after removing nothing is what made this look like it worked
     // while the daemon kept running. Fail loudly instead.
     if (result.pending.length > 0) {
-        console.error('\n\x1b[31mService NOT removed.\x1b[0m Run the commands above, then: devdash-agent status');
+        console.error('\n\x1b[31mService NOT removed.\x1b[0m Run the commands above, then: dialout status');
         process.exitCode = 1;
         return;
     }
@@ -848,7 +878,7 @@ program
     const leftovers = (0, service_installer_1.listSupervisors)().filter((s) => s.kind === 'cron');
     if (leftovers.length > 0) {
         console.log('\n\x1b[33mA cron watchdog is still installed and will restart the agent.\x1b[0m');
-        console.log('  Remove it with: devdash-agent remove-cron');
+        console.log('  Remove it with: dialout remove-cron');
     }
     if (fs.existsSync((0, config_1.getPidFile)())) {
         const pid = parseInt(fs.readFileSync((0, config_1.getPidFile)(), 'utf-8').trim(), 10);
@@ -860,7 +890,7 @@ program
         catch { /* stale */ }
         if (alive) {
             console.log(`\n\x1b[33mA manually started agent is still running (PID ${pid}).\x1b[0m`);
-            console.log('  Stop it with: devdash-agent stop');
+            console.log('  Stop it with: dialout stop');
         }
     }
 });
@@ -878,11 +908,11 @@ program
     $ dialout setup-cron -i 3           # every 3 minutes
     $ dialout setup-cron --interval 10  # every 10 minutes
 
-  To remove: devdash-agent remove-cron`)
+  To remove: dialout remove-cron`)
     .action((opts) => {
     const config = (0, config_1.loadConfig)();
     if (!config.serverUrl || !config.apiKey) {
-        console.error('Not configured. Run "devdash-agent init" first.');
+        console.error('Not configured. Run "dialout init" first.');
         process.exit(1);
     }
     // A launchd/systemd service already supervises the agent and auto-restarts
@@ -894,7 +924,7 @@ program
     if (svc.installed) {
         console.log('An OS service is already installed — it auto-restarts the agent on its own.');
         console.log('A cron watchdog would be a second, conflicting supervisor, so this is a no-op.');
-        console.log('To use cron instead, run: devdash-agent uninstall-service first.');
+        console.log('To use cron instead, run: dialout uninstall-service first.');
         process.exit(0);
     }
     const interval = parseInt(opts.interval, 10) || 5;
@@ -941,7 +971,7 @@ program
     .command('repair')
     .description('Rewrite a stale cron watchdog left by an old install/rename')
     .addHelpText('after', `
-  Fixes exactly one thing: a cron watchdog (~/.devdash-agent/watchdog.sh)
+  Fixes exactly one thing: a cron watchdog (~/.dialout/watchdog.sh)
   whose SCRIPT= line still points at an old, renamed, or uninstalled
   package build — a machine can end up resurrecting a deprecated version
   every few minutes, fighting the real daemon for the same registration.
@@ -965,7 +995,7 @@ program
         console.log('Dialout Agent Repair');
         console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
         console.log(`\x1b[31m  ✗ Could not repair the watchdog: ${message}\x1b[0m`);
-        console.log('    Nothing was changed. Check that ~/.devdash-agent/watchdog.sh is a regular,');
+        console.log('    Nothing was changed. Check that ~/.dialout/watchdog.sh is a regular,');
         console.log('    readable file you have permission to modify, then try again.');
         console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
         console.log('');
@@ -977,7 +1007,7 @@ program
     console.log('Dialout Agent Repair');
     console.log('\x1b[90m' + '─'.repeat(44) + '\x1b[0m');
     if (repaired) {
-        console.log('\x1b[32m  ✓ Rewrote stale watchdog:\x1b[0m ~/.devdash-agent/watchdog.sh');
+        console.log('\x1b[32m  ✓ Rewrote stale watchdog:\x1b[0m ~/.dialout/watchdog.sh');
         console.log(`    from: ${from}`);
         console.log(`    to:   ${to}`);
         console.log('    (previous version backed up alongside it as watchdog.sh.bak-<timestamp>)');
@@ -1012,10 +1042,10 @@ program
         console.log('');
         console.log('  Remove the extra one(s) yourself:');
         if (supervisors.some((s) => s.kind === 'cron')) {
-            console.log('    devdash-agent remove-cron         # drop the cron watchdog');
+            console.log('    dialout remove-cron         # drop the cron watchdog');
         }
         if (supervisors.some((s) => s.kind !== 'cron')) {
-            console.log('    devdash-agent uninstall-service   # drop the launchd/systemd service');
+            console.log('    dialout uninstall-service   # drop the launchd/systemd service');
         }
     }
     else if (staleRemaining.length > 0) {
@@ -1086,7 +1116,7 @@ program
             go = ans === 'y' || ans === 'yes';
         }
         if (!go) {
-            console.log(`Declined. Install tmux manually (${plan.command}) then re-run: devdash-agent setup-cowork`);
+            console.log(`Declined. Install tmux manually (${plan.command}) then re-run: dialout setup-cowork`);
             process.exitCode = 1;
             return;
         }
@@ -1267,7 +1297,7 @@ program
         console.log('\x1b[33mNote:\x1b[0m setup ran inside tmux, so "this terminal" could not be pre-ticked.');
         console.log('Re-run from a native terminal window if the checklist missed your app.');
     }
-    console.log('Restart the agent to start reporting sessions: devdash-agent restart');
+    console.log('Restart the agent to start reporting sessions: dialout restart');
 });
 // --- update ---
 program
@@ -1289,13 +1319,13 @@ const configCmd = program
     .description('View or modify agent configuration')
     .addHelpText('after', `
   Subcommands:
-    devdash-agent config show                      Print current config (API key masked)
-    devdash-agent config path                      Show config file location
-    devdash-agent config reset                     Reset to defaults (keeps API key + server)
-    devdash-agent config set <key> <value>         Set a config value
+    dialout config show                      Print current config (API key masked)
+    dialout config path                      Show config file location
+    dialout config reset                     Reset to defaults (keeps API key + server)
+    dialout config set <key> <value>         Set a config value
 
   Config keys:
-    serverUrl         WebSocket URL (e.g., wss://devdash.server.com/ws)
+    serverUrl         WebSocket URL (e.g., wss://dialout.example.com/ws)
     apiKey            Machine API key (e.g., mch_xxxx)
     heartbeatInterval Keep-alive interval in ms (default: 30000)
     cronInterval      Watchdog check interval in minutes (default: 5)
@@ -1353,7 +1383,7 @@ configCmd
     .description('Set a configuration value')
     .addHelpText('after', `
   Available keys:
-    serverUrl         WebSocket URL (e.g., wss://devdash.server.com/ws)
+    serverUrl         WebSocket URL (e.g., wss://dialout.example.com/ws)
     apiKey            Machine API key (e.g., mch_xxxx)
     heartbeatInterval Keep-alive interval in ms (default: 30000)
     cronInterval      Watchdog check interval in minutes (default: 5)

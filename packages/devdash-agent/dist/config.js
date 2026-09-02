@@ -34,6 +34,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_LOCAL_SERVER_URL = exports.DEFAULT_SERVER_URL = void 0;
+exports.configDirFor = configDirFor;
+exports.legacyConfigDirFor = legacyConfigDirFor;
 exports.getConfigDir = getConfigDir;
 exports.getPidFile = getPidFile;
 exports.ensureConfigDir = ensureConfigDir;
@@ -45,7 +47,22 @@ exports.getConfigPath = getConfigPath;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
-const CONFIG_DIR = path.join(os.homedir(), '.devdash-agent');
+/**
+ * Where the agent keeps config, logs, the pid file and the watchdog.
+ *
+ * `configDirFor` is parameterised on the home directory so the service
+ * installer and its tests can resolve the same path for a home other than the
+ * current user's.
+ */
+function configDirFor(homedir) {
+    return path.join(homedir, '.dialout');
+}
+/** The pre-rename location, kept only so an existing install can be migrated. */
+function legacyConfigDirFor(homedir) {
+    return path.join(homedir, '.devdash-agent');
+}
+const CONFIG_DIR = configDirFor(os.homedir());
+const LEGACY_CONFIG_DIR = legacyConfigDirFor(os.homedir());
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const PID_FILE = path.join(CONFIG_DIR, 'daemon.pid');
 exports.DEFAULT_SERVER_URL = 'wss://www.dialout.dev/ws';
@@ -65,9 +82,26 @@ function getPidFile() {
     return PID_FILE;
 }
 function ensureConfigDir() {
-    if (!fs.existsSync(CONFIG_DIR)) {
-        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (fs.existsSync(CONFIG_DIR))
+        return;
+    // One-time migration from the pre-rename directory. This COPIES rather than
+    // moves: an older agent may still be installed and running against the old
+    // path, and pulling its config out from under a live process would break it
+    // mid-flight. The old directory is left for the operator to delete once the
+    // old agent is gone.
+    if (fs.existsSync(LEGACY_CONFIG_DIR)) {
+        try {
+            fs.cpSync(LEGACY_CONFIG_DIR, CONFIG_DIR, { recursive: true });
+            console.log(`\x1b[90mMigrated agent config ${LEGACY_CONFIG_DIR} -> ${CONFIG_DIR}\x1b[0m`);
+            console.log(`\x1b[90mThe old directory was left in place; delete it once the old agent is removed.\x1b[0m`);
+            return;
+        }
+        catch {
+            // A failed copy must not stop the agent starting — fall through and
+            // create an empty directory, which `init` can populate.
+        }
     }
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
 }
 function loadConfig() {
     ensureConfigDir();

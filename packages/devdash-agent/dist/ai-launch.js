@@ -52,6 +52,7 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const shared_1 = require("@dialout/shared");
 Object.defineProperty(exports, "PERMISSION_MODES", { enumerable: true, get: function () { return shared_1.PERMISSION_MODES; } });
+const config_1 = require("./config");
 // Launch mode: sessions DevDash starts, rather than ones the user started in
 // their own terminal.
 //
@@ -105,7 +106,7 @@ function buildLaunchArgs(rec, firstTurn) {
     ];
 }
 function registryPath() {
-    return path.join(os.homedir(), '.devdash-agent', 'ai-launched.json');
+    return path.join((0, config_1.configDirFor)(os.homedir()), 'ai-launched.json');
 }
 function defaultRead() {
     return fs.readFileSync(registryPath(), 'utf8');

@@ -108,7 +108,7 @@ function AiSessionsView() {
             Press <strong>New session</strong> to start one here, or run <code>claude</code> or{' '}
             <code>codex</code> in a terminal on this machine and it will appear within a few
             seconds. A terminal session has to be inside tmux — run{' '}
-            <code>devdash-agent setup-cowork</code> once if your terminals are not wrapped yet.
+            <code>dialout setup-cowork</code> once if your terminals are not wrapped yet.
           </p>
         </div>
       ) : (

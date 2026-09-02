@@ -52,8 +52,9 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const child_process_1 = require("child_process");
-const SERVICE_NAME = 'com.devdash.agent';
-const SYSTEMD_UNIT = 'devdash-agent';
+const config_1 = require("./config");
+const SERVICE_NAME = 'com.dialout.agent';
+const SYSTEMD_UNIT = 'dialout';
 function getNodePath() {
     try {
         return (0, child_process_1.execSync)('which node', { encoding: 'utf-8' }).trim();
@@ -135,12 +136,12 @@ function getLaunchDaemonPlistPath() {
 function generatePlist(system) {
     const nodePath = getNodePath();
     const script = getAgentScript();
-    const logDir = path.join(os.homedir(), '.devdash-agent', 'logs');
+    const logDir = path.join((0, config_1.configDirFor)(os.homedir()), 'logs');
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
     }
     // A system daemon runs as root by default; pin it to the invoking user so it
-    // can read ~/.devdash-agent/config.json and write the user's log dir.
+    // can read ~/.dialout/config.json and write the user's log dir.
     const userKey = system
         ? `  <key>UserName</key>\n  <string>${serviceUser()}</string>\n`
         : '';
@@ -211,7 +212,7 @@ function installMacOSAgent() {
 }
 function installMacOSDaemon() {
     const target = getLaunchDaemonPlistPath();
-    const staging = path.join(os.homedir(), '.devdash-agent', `${SERVICE_NAME}.plist`);
+    const staging = path.join((0, config_1.configDirFor)(os.homedir()), `${SERVICE_NAME}.plist`);
     fs.writeFileSync(staging, generatePlist(true));
     // A system daemon and a per-user agent share a Label — drop the agent first.
     removeLaunchAgent();
@@ -238,7 +239,7 @@ function installMacOSDaemon() {
             (0, child_process_1.execSync)(`sudo bash -c 'cp "${staging}" "${target}" && chown root:wheel "${target}" && chmod 644 "${target}" && { launchctl bootout system "${target}" 2>/dev/null; launchctl bootstrap system "${target}"; }'`, { stdio: 'inherit' });
             console.log(`\nSystem service installed: ${target}`);
             console.log(`The agent will start at boot, before login (as user "${serviceUser()}").`);
-            console.log('Verify with: devdash-agent status');
+            console.log('Verify with: dialout status');
         }
         catch {
             console.error('\nsudo install failed. Run these commands manually:');
@@ -257,7 +258,7 @@ function printMacDaemonSudoSteps(staging, target) {
     console.log(`  sudo chmod 644 ${target}`);
     console.log(`  sudo launchctl bootstrap system ${target}`);
     console.log('');
-    console.log(`Then it runs at boot as user "${serviceUser()}". Verify: devdash-agent status`);
+    console.log(`Then it runs at boot as user "${serviceUser()}". Verify: dialout status`);
 }
 function uninstallMacOS(deps = {}) {
     const exists = deps.existsSync ?? fs.existsSync;
@@ -386,12 +387,12 @@ function installLinuxUser() {
         console.log('\x1b[33mWarning:\x1b[0m this service stops when your last session ends.');
         console.log(`  Could not enable lingering: ${linger.error}`);
         console.log(`  Fix with:  sudo loginctl enable-linger ${user}`);
-        console.log('  Or install the boot service instead:  devdash-agent install-service --system');
+        console.log('  Or install the boot service instead:  dialout install-service --system');
     }
 }
 function installLinuxSystem() {
     const target = getSystemdSystemUnitPath();
-    const staging = path.join(os.homedir(), '.devdash-agent', `${SYSTEMD_UNIT}.service`);
+    const staging = path.join((0, config_1.configDirFor)(os.homedir()), `${SYSTEMD_UNIT}.service`);
     fs.writeFileSync(staging, generateSystemdUnit(true));
     if (isRoot()) {
         fs.copyFileSync(staging, target);
@@ -407,7 +408,7 @@ function installLinuxSystem() {
             (0, child_process_1.execSync)(`sudo bash -c 'cp "${staging}" "${target}" && systemctl daemon-reload && systemctl enable --now ${SYSTEMD_UNIT}'`, { stdio: 'inherit' });
             console.log(`\nSystem service installed: ${target}`);
             console.log(`The agent will start at boot, before login (as user "${serviceUser()}").`);
-            console.log('Verify with: devdash-agent status');
+            console.log('Verify with: dialout status');
         }
         catch {
             console.error('\nsudo install failed. Run these commands manually:');
@@ -425,7 +426,7 @@ function printLinuxSystemSudoSteps(staging, target) {
     console.log(`  sudo systemctl daemon-reload`);
     console.log(`  sudo systemctl enable --now ${SYSTEMD_UNIT}`);
     console.log('');
-    console.log(`Then it runs at boot as user "${serviceUser()}". Verify: devdash-agent status`);
+    console.log(`Then it runs at boot as user "${serviceUser()}". Verify: dialout status`);
 }
 function uninstallLinux(deps = {}) {
     const exists = deps.existsSync ?? fs.existsSync;
@@ -489,7 +490,7 @@ function installService(opts = {}) {
         opts.system ? installLinuxSystem() : installLinuxUser();
     }
     else {
-        console.error(`Unsupported platform: ${platform}. Use "devdash-agent start --daemon" instead.`);
+        console.error(`Unsupported platform: ${platform}. Use "dialout start --daemon" instead.`);
         process.exit(1);
     }
 }
@@ -544,15 +545,15 @@ function getServiceStatus() {
     return { installed: false, running: false, pid: null, kind: null, atBoot: false };
 }
 // --- Cron-based watchdog ---
-const CRON_MARKER = '# devdash-agent-watchdog';
+const CRON_MARKER = '# dialout-watchdog';
 function getWatchdogPath(homedir = os.homedir()) {
-    return path.join(homedir, '.devdash-agent', 'watchdog.sh');
+    return path.join((0, config_1.configDirFor)(homedir), 'watchdog.sh');
 }
 function getWatchdogScript() {
     const nodePath = getNodePath();
     const script = getAgentScript();
-    const pidFile = path.join(os.homedir(), '.devdash-agent', 'daemon.pid');
-    const logDir = path.join(os.homedir(), '.devdash-agent', 'logs');
+    const pidFile = path.join((0, config_1.configDirFor)(os.homedir()), 'daemon.pid');
+    const logDir = path.join((0, config_1.configDirFor)(os.homedir()), 'logs');
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
     }
@@ -625,7 +626,7 @@ function installCron(intervalMinutes = 5) {
         existing = (0, child_process_1.execSync)('crontab -l 2>/dev/null', { encoding: 'utf-8' });
     }
     catch { /* no existing crontab */ }
-    // Remove any old devdash-agent entries
+    // Remove any old dialout entries
     const lines = existing.split('\n').filter((l) => !l.includes(CRON_MARKER) && l.trim() !== '');
     // Add new entry
     lines.push(`*/${intervalMinutes} * * * * ${watchdogPath} ${CRON_MARKER}`);
@@ -679,7 +680,7 @@ function isCronInstalled() {
 // only one of them.
 //
 // This function checks every supervisor slot independently and returns all
-// of them, so `devdash-agent status` (in cli.ts) can show the full picture.
+// of them, so `dialout status` (in cli.ts) can show the full picture.
 /** Parse the script path out of a systemd unit's `ExecStart=<node> <script>` line. */
 function parseScriptFromUnit(content) {
     const m = content.match(/^ExecStart=(.+)$/m);
@@ -844,7 +845,7 @@ function nextBackupPath(watchdogPath) {
 //
 // repairWatchdog() above rewrites exactly one file: the cron watchdog's
 // SCRIPT= line. It never touches a launchd plist or a systemd unit. So
-// telling the operator to run "devdash-agent repair" for a stale unit is a
+// telling the operator to run "dialout repair" for a stale unit is a
 // dead end — repair will report "nothing to repair" while the unit stays
 // stale.
 //
@@ -864,18 +865,18 @@ function staleSupervisorAdvice(s) {
     if (s.kind === 'cron') {
         return [
             `  ⚠ ${s.path} points at a stale script (${s.targetScript}).`,
-            '    Run "devdash-agent repair" to fix it.',
+            '    Run "dialout repair" to fix it.',
         ];
     }
-    const installCmd = s.atBoot ? 'devdash-agent install-service --system' : 'devdash-agent install-service';
+    const installCmd = s.atBoot ? 'dialout install-service --system' : 'dialout install-service';
     return [
         `  ⚠ ${s.path} points at a stale script (${s.targetScript}).`,
         `    Run "${installCmd}" to regenerate it from the current build,`,
-        '    or "devdash-agent uninstall-service" if this supervisor is redundant.',
+        '    or "dialout uninstall-service" if this supervisor is redundant.',
     ];
 }
 /**
- * Rewrite `~/.devdash-agent/watchdog.sh` if its SCRIPT= line has drifted from
+ * Rewrite `~/.dialout/watchdog.sh` if its SCRIPT= line has drifted from
  * the current agent script. No-op (repaired: false) when the watchdog is
  * absent or already correct — in particular, an already-correct watchdog is
  * left byte-for-byte and mtime-untouched, and no backup is created.

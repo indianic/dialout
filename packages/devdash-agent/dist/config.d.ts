@@ -18,6 +18,16 @@ export interface AgentConfig {
     /** Terminal-app tokens whose shells auto-wrap into tmux for remote access. */
     coworkTerminals?: string[];
 }
+/**
+ * Where the agent keeps config, logs, the pid file and the watchdog.
+ *
+ * `configDirFor` is parameterised on the home directory so the service
+ * installer and its tests can resolve the same path for a home other than the
+ * current user's.
+ */
+export declare function configDirFor(homedir: string): string;
+/** The pre-rename location, kept only so an existing install can be migrated. */
+export declare function legacyConfigDirFor(homedir: string): string;
 export declare const DEFAULT_SERVER_URL = "wss://www.dialout.dev/ws";
 export declare const DEFAULT_LOCAL_SERVER_URL = "ws://localhost:50052";
 export declare function getConfigDir(): string;

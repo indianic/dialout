@@ -38,7 +38,7 @@ No vitest coverage of this file. Verify with `npm run ws:start` plus an agent, o
 
 New daemon capability path:
 
-agent handler → `packages/devdash-agent/src/websocket.ts` message type → `handleDaemonMessage` case (resolve `pendingRequests` by `requestId`) → exported `request*()` → HTTP route in `server.on('request')` → wrapper in `src/lib/daemon-status.ts` → Next.js API route.
+agent handler → `packages/dialout/src/websocket.ts` message type → `handleDaemonMessage` case (resolve `pendingRequests` by `requestId`) → exported `request*()` → HTTP route in `server.on('request')` → wrapper in `src/lib/daemon-status.ts` → Next.js API route.
 
 ## Dependencies
 

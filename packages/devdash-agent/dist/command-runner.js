@@ -5,7 +5,8 @@ const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const os_1 = require("os");
 const path_1 = require("path");
-const LOG_DIR = (0, path_1.join)((0, os_1.homedir)(), '.devdash-agent', 'logs');
+const config_1 = require("./config");
+const LOG_DIR = (0, path_1.join)((0, config_1.configDirFor)((0, os_1.homedir)()), 'logs');
 function sanitize(name) {
     return (name || 'run').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60) || 'run';
 }

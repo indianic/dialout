@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { AiKind, PermissionMode, PERMISSION_MODES } from '@dialout/shared';
+import { configDirFor } from './config';
 export type { PermissionMode };
 export { PERMISSION_MODES };
 
@@ -86,7 +87,7 @@ export interface RegistryDeps {
 }
 
 function registryPath(): string {
-  return path.join(os.homedir(), '.devdash-agent', 'ai-launched.json');
+  return path.join(configDirFor(os.homedir()), 'ai-launched.json');
 }
 
 function defaultRead(): string {

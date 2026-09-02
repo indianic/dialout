@@ -386,9 +386,14 @@ Your configuration is untouched by any of this. `~/.dialout/config.json` stays
 where it is, and a much older `~/.devdash-agent` is **copied** rather than moved
 on first run, so no re-`init` is needed.
 
-> **On an IndiaNIC machine, check your `~/.npmrc` first.** A line reading
-> `@indianic:registry=https://npm.indianic.in/` points the whole scope at a
-> retired private registry, and this package will 404 until it is removed.
+> **If this 404s, check `~/.npmrc` for a scope override.** A line beginning
+> `@indianic:registry=` points the whole scope at some other registry, and this
+> package will not be found until it is removed:
+>
+> ```bash
+> npm config get @indianic:registry   # should be https://registry.npmjs.org/
+> npm config delete @indianic:registry
+> ```
 
 ## The mobile app
 

@@ -29,7 +29,7 @@ export function startHeartbeat(ws: WebSocket, intervalMs: number, onStale?: () =
   heartbeatTimer = setInterval(() => {
     if (ws.readyState !== WebSocket.OPEN) return;
     if (isConnectionStale(lastPongAt, Date.now(), intervalMs)) {
-      console.error('[devdash-agent] No pong from server — connection is dead, reconnecting');
+      console.error('[dialout] No pong from server — connection is dead, reconnecting');
       stopHeartbeat();
       onStale?.();
       return;

@@ -15,7 +15,7 @@ None at this level.
 
 | Directory | Purpose |
 |-----------|---------|
-| `devdash-agent/` | Outbound daemon: ports, tmux/PTY, FS browse, project scan, AI transcript tail (see `devdash-agent/AGENTS.md`) |
+| `dialout/` | Outbound daemon: ports, tmux/PTY, FS browse, project scan, AI transcript tail (see `dialout/AGENTS.md`) |
 
 ## For AI Agents
 
@@ -30,7 +30,7 @@ Each package runs its own tests. Root `npm test` does not recurse here.
 
 ### Common Patterns
 
-`devdash-agent` ships compiled `dist/` — source of truth is `src/`, but `dist/` must be in sync before publish.
+`dialout` ships compiled `dist/` — source of truth is `src/`, but `dist/` must be in sync before publish.
 
 ## Dependencies
 
@@ -40,6 +40,6 @@ Agent talks to the root app's ws-server, not to Next.js.
 
 ### External
 
-See `devdash-agent/AGENTS.md`.
+See `dialout/AGENTS.md`.
 
 <!-- MANUAL: -->

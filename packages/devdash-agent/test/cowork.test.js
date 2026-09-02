@@ -795,7 +795,7 @@ test('renderCoworkBlock drops illegal tokens before injection', () => {
 test('removeCoworkBlock strips the marker block and leaves other content', () => {
   const rc = `export FOO=1\n\n${renderCoworkBlock(['Hyper'])}\n\nexport BAR=2\n`;
   const out = removeCoworkBlock(rc);
-  assert.doesNotMatch(out, /devdash cowork wrapper/);
+  assert.doesNotMatch(out, /dialout cowork wrapper/);
   assert.match(out, /export FOO=1/);
   assert.match(out, /export BAR=2/);
 });

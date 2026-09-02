@@ -26,7 +26,7 @@ const single_instance_1 = require("./single-instance");
 })();
 const config = (0, config_1.loadConfig)();
 if (!config.serverUrl || !config.apiKey) {
-    console.error('[devdash-agent] Not configured. Run: devdash-agent init');
+    console.error('[dialout] Not configured. Run: dialout init');
     process.exit(1);
 }
 // Enforce one agent per server URL. A watchdog/service respawn or a stray
@@ -34,22 +34,22 @@ if (!config.serverUrl || !config.apiKey) {
 // aside here instead of opening a second socket on the same key (which the
 // server would drop with close 1006, flapping both). See single-instance.ts.
 if (!(0, single_instance_1.acquireSingleInstanceLock)(config.serverUrl)) {
-    console.log(`[devdash-agent] Already running for ${config.serverUrl} — exiting (single instance).`);
+    console.log(`[dialout] Already running for ${config.serverUrl} — exiting (single instance).`);
     process.exit(0);
 }
-console.log(`[devdash-agent] Starting...`);
-console.log(`[devdash-agent] Server: ${config.serverUrl}`);
+console.log(`[dialout] Starting...`);
+console.log(`[dialout] Server: ${config.serverUrl}`);
 (0, websocket_1.connect)(config, () => {
-    console.log('[devdash-agent] Ready');
+    console.log('[dialout] Ready');
 });
 // Graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\n[devdash-agent] Shutting down...');
+    console.log('\n[dialout] Shutting down...');
     (0, websocket_1.disconnect)();
     process.exit(0);
 });
 process.on('SIGTERM', () => {
-    console.log('[devdash-agent] Shutting down...');
+    console.log('[dialout] Shutting down...');
     (0, websocket_1.disconnect)();
     process.exit(0);
 });

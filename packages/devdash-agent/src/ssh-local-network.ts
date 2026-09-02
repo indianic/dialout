@@ -2,8 +2,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-export const SSH_LN_BEGIN = '# >>> devdash ssh local-network workaround >>>';
-export const SSH_LN_END = '# <<< devdash ssh local-network workaround <<<';
+export const SSH_LN_BEGIN = '# >>> dialout ssh local-network workaround >>>';
+export const SSH_LN_END = '# <<< dialout ssh local-network workaround <<<';
+
+// Pre-rename markers. Same reasoning as the cowork block: this one lives in
+// the user's ssh config, so removal must still recognise it.
+const LEGACY_SSH_LN_BEGIN = '# >>> devdash ssh local-network workaround >>>';
+const LEGACY_SSH_LN_END = '# <<< devdash ssh local-network workaround <<<';
 
 // Why this exists at all:
 //
@@ -62,20 +67,28 @@ export function renderSshLocalNetworkBlock(
   const base = Number.isFinite(asNumber) ? asNumber : DEFAULT_CONNECT_TIMEOUT;
   const secs = Math.max(1, Math.min(300, Math.trunc(base)));
   return `${SSH_LN_BEGIN}
-# Managed by devdash-agent — do not edit inside the markers.
+# Managed by dialout — do not edit inside the markers.
 # macOS Local Network Privacy judges the tmux SERVER, so every tmux session on
 # this machine is denied LAN access and ssh to a local host dies with
 # "Undefined error: 0" — while the same command works in a non-tmux window.
 # ConnectTimeout selects ssh's legacy BSD-socket connect, which is not gated.
 # The real cure is to allow tmux under System Settings > Privacy & Security >
-# Local Network. Removed by "devdash-agent uninstall-service" and
-# "devdash-agent setup-cowork --remove", or delete the block by hand.
+# Local Network. Removed by "dialout uninstall-service" and
+# "dialout setup-cowork --remove", or delete the block by hand.
 Host *
   ConnectTimeout ${secs}
 ${SSH_LN_END}`;
 }
 
 export function removeSshLocalNetworkBlock(content: string): string {
+  {
+    const b = content.indexOf(LEGACY_SSH_LN_BEGIN);
+    const e = content.indexOf(LEGACY_SSH_LN_END);
+    if (b !== -1 && e !== -1) {
+      content = (content.slice(0, b) + content.slice(e + LEGACY_SSH_LN_END.length))
+        .replace(/\n{3,}/g, '\n\n');
+    }
+  }
   const begin = content.indexOf(SSH_LN_BEGIN);
   if (begin === -1) return content;
   const end = content.indexOf(SSH_LN_END);

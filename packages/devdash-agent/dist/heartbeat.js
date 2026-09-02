@@ -32,7 +32,7 @@ function startHeartbeat(ws, intervalMs, onStale) {
         if (ws.readyState !== ws_1.default.OPEN)
             return;
         if (isConnectionStale(lastPongAt, Date.now(), intervalMs)) {
-            console.error('[devdash-agent] No pong from server — connection is dead, reconnecting');
+            console.error('[dialout] No pong from server — connection is dead, reconnecting');
             stopHeartbeat();
             onStale?.();
             return;

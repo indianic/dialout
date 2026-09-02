@@ -1,5 +1,5 @@
-export declare const COWORK_BEGIN = "# >>> devdash cowork wrapper >>>";
-export declare const COWORK_END = "# <<< devdash cowork wrapper <<<";
+export declare const COWORK_BEGIN = "# >>> dialout cowork wrapper >>>";
+export declare const COWORK_END = "# <<< dialout cowork wrapper <<<";
 export declare const TOKEN_RE: RegExp;
 export declare function sanitizeTokens(tokens: string[]): string[];
 export declare function renderMatchGate(tokens: string[]): string;

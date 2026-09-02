@@ -86,7 +86,7 @@ export interface WatchdogRepairResult {
 }
 export declare function staleSupervisorAdvice(s: SupervisorInfo): string[];
 /**
- * Rewrite `~/.devdash-agent/watchdog.sh` if its SCRIPT= line has drifted from
+ * Rewrite `~/.dialout/watchdog.sh` if its SCRIPT= line has drifted from
  * the current agent script. No-op (repaired: false) when the watchdog is
  * absent or already correct — in particular, an already-correct watchdog is
  * left byte-for-byte and mtime-untouched, and no backup is created.

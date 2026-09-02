@@ -98,7 +98,7 @@ export async function tmuxAvailable(now: () => number = Date.now): Promise<boole
     await run(['-V']);
     available = true;
     if (warnedUnavailable) {
-      console.log('[devdash-agent] tmux is now available — resuming session reporting.');
+      console.log('[dialout] tmux is now available — resuming session reporting.');
       warnedUnavailable = false;
     }
   } catch {
@@ -108,7 +108,7 @@ export async function tmuxAvailable(now: () => number = Date.now): Promise<boole
     if (!warnedUnavailable) {
       warnedUnavailable = true;
       console.error(
-        '[devdash-agent] tmux not found on PATH — terminal sessions and AI sessions '
+        '[dialout] tmux not found on PATH — terminal sessions and AI sessions '
         + 'CANNOT be reported. Install tmux, or make it reachable from this PATH: '
         + (process.env.PATH || '(empty)')
       );
@@ -222,7 +222,7 @@ export async function listSessions(): Promise<TmuxSessionInfo[]> {
   if (unparsed > 0 && sessions.length === 0 && !warnedUnparsed) {
     warnedUnparsed = true;
     console.error(
-      `[devdash-agent] tmux listed ${unparsed} session(s) but none could be parsed —`
+      `[dialout] tmux listed ${unparsed} session(s) but none could be parsed —`
       + ' reporting no terminals. First line was:'
       + ` ${JSON.stringify(out.split('\n')[0])}`
     );

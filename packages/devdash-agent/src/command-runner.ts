@@ -2,8 +2,9 @@ import { spawn, exec } from 'child_process';
 import { openSync, closeSync, mkdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { configDirFor } from './config';
 
-const LOG_DIR = join(homedir(), '.devdash-agent', 'logs');
+const LOG_DIR = join(configDirFor(homedir()), 'logs');
 
 function sanitize(name: string): string {
   return (name || 'run').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60) || 'run';

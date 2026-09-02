@@ -166,7 +166,7 @@ export default function TerminalsPage() {
               <>
                 Enable session sharing on a machine with{' '}
                 <code style={{ background: 'var(--glass)', padding: '2px 6px', borderRadius: 4 }}>
-                  devdash-agent setup-cowork
+                  dialout setup-cowork
                 </code>{' '}
                 — new terminal windows will appear here.
               </>

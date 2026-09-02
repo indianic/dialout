@@ -2,9 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
+import { configDirFor } from './config';
 
-const SERVICE_NAME = 'com.devdash.agent';
-const SYSTEMD_UNIT = 'devdash-agent';
+const SERVICE_NAME = 'com.dialout.agent';
+const SYSTEMD_UNIT = 'dialout';
 
 function getNodePath(): string {
   try {
@@ -99,14 +100,14 @@ function getLaunchDaemonPlistPath(): string {
 function generatePlist(system: boolean): string {
   const nodePath = getNodePath();
   const script = getAgentScript();
-  const logDir = path.join(os.homedir(), '.devdash-agent', 'logs');
+  const logDir = path.join(configDirFor(os.homedir()), 'logs');
 
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
 
   // A system daemon runs as root by default; pin it to the invoking user so it
-  // can read ~/.devdash-agent/config.json and write the user's log dir.
+  // can read ~/.dialout/config.json and write the user's log dir.
   const userKey = system
     ? `  <key>UserName</key>\n  <string>${serviceUser()}</string>\n`
     : '';
@@ -177,7 +178,7 @@ function installMacOSAgent(): void {
 
 function installMacOSDaemon(): void {
   const target = getLaunchDaemonPlistPath();
-  const staging = path.join(os.homedir(), '.devdash-agent', `${SERVICE_NAME}.plist`);
+  const staging = path.join(configDirFor(os.homedir()), `${SERVICE_NAME}.plist`);
   fs.writeFileSync(staging, generatePlist(true));
 
   // A system daemon and a per-user agent share a Label — drop the agent first.
@@ -204,7 +205,7 @@ function installMacOSDaemon(): void {
       );
       console.log(`\nSystem service installed: ${target}`);
       console.log(`The agent will start at boot, before login (as user "${serviceUser()}").`);
-      console.log('Verify with: devdash-agent status');
+      console.log('Verify with: dialout status');
     } catch {
       console.error('\nsudo install failed. Run these commands manually:');
       printMacDaemonSudoSteps(staging, target);
@@ -222,7 +223,7 @@ function printMacDaemonSudoSteps(staging: string, target: string): void {
   console.log(`  sudo chmod 644 ${target}`);
   console.log(`  sudo launchctl bootstrap system ${target}`);
   console.log('');
-  console.log(`Then it runs at boot as user "${serviceUser()}". Verify: devdash-agent status`);
+  console.log(`Then it runs at boot as user "${serviceUser()}". Verify: dialout status`);
 }
 
 function uninstallMacOS(deps: UninstallDeps = {}): UninstallResult {
@@ -393,13 +394,13 @@ function installLinuxUser(): void {
     console.log('\x1b[33mWarning:\x1b[0m this service stops when your last session ends.');
     console.log(`  Could not enable lingering: ${linger.error}`);
     console.log(`  Fix with:  sudo loginctl enable-linger ${user}`);
-    console.log('  Or install the boot service instead:  devdash-agent install-service --system');
+    console.log('  Or install the boot service instead:  dialout install-service --system');
   }
 }
 
 function installLinuxSystem(): void {
   const target = getSystemdSystemUnitPath();
-  const staging = path.join(os.homedir(), '.devdash-agent', `${SYSTEMD_UNIT}.service`);
+  const staging = path.join(configDirFor(os.homedir()), `${SYSTEMD_UNIT}.service`);
   fs.writeFileSync(staging, generateSystemdUnit(true));
 
   if (isRoot()) {
@@ -418,7 +419,7 @@ function installLinuxSystem(): void {
       );
       console.log(`\nSystem service installed: ${target}`);
       console.log(`The agent will start at boot, before login (as user "${serviceUser()}").`);
-      console.log('Verify with: devdash-agent status');
+      console.log('Verify with: dialout status');
     } catch {
       console.error('\nsudo install failed. Run these commands manually:');
       printLinuxSystemSudoSteps(staging, target);
@@ -435,7 +436,7 @@ function printLinuxSystemSudoSteps(staging: string, target: string): void {
   console.log(`  sudo systemctl daemon-reload`);
   console.log(`  sudo systemctl enable --now ${SYSTEMD_UNIT}`);
   console.log('');
-  console.log(`Then it runs at boot as user "${serviceUser()}". Verify: devdash-agent status`);
+  console.log(`Then it runs at boot as user "${serviceUser()}". Verify: dialout status`);
 }
 
 function uninstallLinux(deps: UninstallDeps = {}): UninstallResult {
@@ -521,7 +522,7 @@ export function installService(opts: InstallOptions = {}): void {
   } else if (platform === 'linux') {
     opts.system ? installLinuxSystem() : installLinuxUser();
   } else {
-    console.error(`Unsupported platform: ${platform}. Use "devdash-agent start --daemon" instead.`);
+    console.error(`Unsupported platform: ${platform}. Use "dialout start --daemon" instead.`);
     process.exit(1);
   }
 }
@@ -582,17 +583,17 @@ export function getServiceStatus(): ServiceStatus {
 
 // --- Cron-based watchdog ---
 
-const CRON_MARKER = '# devdash-agent-watchdog';
+const CRON_MARKER = '# dialout-watchdog';
 
 function getWatchdogPath(homedir: string = os.homedir()): string {
-  return path.join(homedir, '.devdash-agent', 'watchdog.sh');
+  return path.join(configDirFor(homedir), 'watchdog.sh');
 }
 
 export function getWatchdogScript(): string {
   const nodePath = getNodePath();
   const script = getAgentScript();
-  const pidFile = path.join(os.homedir(), '.devdash-agent', 'daemon.pid');
-  const logDir = path.join(os.homedir(), '.devdash-agent', 'logs');
+  const pidFile = path.join(configDirFor(os.homedir()), 'daemon.pid');
+  const logDir = path.join(configDirFor(os.homedir()), 'logs');
 
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
@@ -666,7 +667,7 @@ export function installCron(intervalMinutes: number = 5): void {
     existing = execSync('crontab -l 2>/dev/null', { encoding: 'utf-8' });
   } catch { /* no existing crontab */ }
 
-  // Remove any old devdash-agent entries
+  // Remove any old dialout entries
   const lines = existing.split('\n').filter((l) => !l.includes(CRON_MARKER) && l.trim() !== '');
 
   // Add new entry
@@ -725,7 +726,7 @@ export function isCronInstalled(): boolean {
 // only one of them.
 //
 // This function checks every supervisor slot independently and returns all
-// of them, so `devdash-agent status` (in cli.ts) can show the full picture.
+// of them, so `dialout status` (in cli.ts) can show the full picture.
 
 /** Parse the script path out of a systemd unit's `ExecStart=<node> <script>` line. */
 function parseScriptFromUnit(content: string): string | null {
@@ -953,7 +954,7 @@ function nextBackupPath(watchdogPath: string): string {
 //
 // repairWatchdog() above rewrites exactly one file: the cron watchdog's
 // SCRIPT= line. It never touches a launchd plist or a systemd unit. So
-// telling the operator to run "devdash-agent repair" for a stale unit is a
+// telling the operator to run "dialout repair" for a stale unit is a
 // dead end — repair will report "nothing to repair" while the unit stays
 // stale.
 //
@@ -973,20 +974,20 @@ export function staleSupervisorAdvice(s: SupervisorInfo): string[] {
   if (s.kind === 'cron') {
     return [
       `  ⚠ ${s.path} points at a stale script (${s.targetScript}).`,
-      '    Run "devdash-agent repair" to fix it.',
+      '    Run "dialout repair" to fix it.',
     ];
   }
 
-  const installCmd = s.atBoot ? 'devdash-agent install-service --system' : 'devdash-agent install-service';
+  const installCmd = s.atBoot ? 'dialout install-service --system' : 'dialout install-service';
   return [
     `  ⚠ ${s.path} points at a stale script (${s.targetScript}).`,
     `    Run "${installCmd}" to regenerate it from the current build,`,
-    '    or "devdash-agent uninstall-service" if this supervisor is redundant.',
+    '    or "dialout uninstall-service" if this supervisor is redundant.',
   ];
 }
 
 /**
- * Rewrite `~/.devdash-agent/watchdog.sh` if its SCRIPT= line has drifted from
+ * Rewrite `~/.dialout/watchdog.sh` if its SCRIPT= line has drifted from
  * the current agent script. No-op (repaired: false) when the watchdog is
  * absent or already correct — in particular, an already-correct watchdog is
  * left byte-for-byte and mtime-untouched, and no backup is created.

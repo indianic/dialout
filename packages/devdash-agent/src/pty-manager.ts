@@ -53,7 +53,7 @@ export function openSession(
 
   // Idempotent: if session already exists, skip
   if (sessions.has(id)) {
-    console.log(`[devdash-agent] Session ${id} already exists, skipping`);
+    console.log(`[dialout] Session ${id} already exists, skipping`);
     return true;
   }
 
@@ -93,7 +93,7 @@ export function openSession(
       // duplicate name, fall into the catch, and silently hand the user a
       // fresh plain shell while their work sat in the orphaned session.
       if (tmuxSessionExists(tmuxName)) {
-        console.log(`[devdash-agent] Resuming existing tmux session ${tmuxName}`);
+        console.log(`[dialout] Resuming existing tmux session ${tmuxName}`);
         resumed = true;
       } else {
         tmuxRun(['new-session', '-d', '-s', tmuxName, '-x', String(cols), '-y', String(rows), '-c', resolvedCwd]);
@@ -127,7 +127,7 @@ export function openSession(
       });
       tmuxMeta = { name: tmuxName, creator: true, readOnly: false };
     } catch (err: any) {
-      console.error(`[devdash-agent] cowork wrap failed, plain shell fallback: ${err.message}`);
+      console.error(`[dialout] cowork wrap failed, plain shell fallback: ${err.message}`);
       // new-session may have succeeded before a later step threw — clean up the
       // half-created session so it doesn't linger untracked. Guard on
       // createdByUs: if new-session ITSELF failed (e.g. duplicate name) the
@@ -149,8 +149,8 @@ export function openSession(
         env: { ...process.env as Record<string, string>, TERM: 'xterm-256color' },
       });
     } catch (err: any) {
-      console.error(`[devdash-agent] PTY spawn failed: ${err.message}`);
-      console.error(`[devdash-agent]   shell: ${shell}, cwd: ${resolvedCwd}`);
+      console.error(`[dialout] PTY spawn failed: ${err.message}`);
+      console.error(`[dialout]   shell: ${shell}, cwd: ${resolvedCwd}`);
       return false;
     }
   }
@@ -444,7 +444,7 @@ export function openAttach(
       env: { ...process.env as Record<string, string>, TERM: 'xterm-256color' },
     });
   } catch (err: any) {
-    console.error(`[devdash-agent] tmux attach failed: ${err.message}`);
+    console.error(`[dialout] tmux attach failed: ${err.message}`);
     return false;
   }
 
@@ -518,7 +518,7 @@ export function detachPtySession(id: string): void {
   sessions.delete(id);
   try { session.process.kill(); } catch {}
   if (!session.tmux) {
-    console.log(`[devdash-agent] Session ${id} has no tmux backing — killed on detach`);
+    console.log(`[dialout] Session ${id} has no tmux backing — killed on detach`);
   }
 }
 

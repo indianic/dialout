@@ -43,8 +43,12 @@ exports.installSshLocalNetworkBlock = installSshLocalNetworkBlock;
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
-exports.SSH_LN_BEGIN = '# >>> devdash ssh local-network workaround >>>';
-exports.SSH_LN_END = '# <<< devdash ssh local-network workaround <<<';
+exports.SSH_LN_BEGIN = '# >>> dialout ssh local-network workaround >>>';
+exports.SSH_LN_END = '# <<< dialout ssh local-network workaround <<<';
+// Pre-rename markers. Same reasoning as the cowork block: this one lives in
+// the user's ssh config, so removal must still recognise it.
+const LEGACY_SSH_LN_BEGIN = '# >>> devdash ssh local-network workaround >>>';
+const LEGACY_SSH_LN_END = '# <<< devdash ssh local-network workaround <<<';
 // Why this exists at all:
 //
 // macOS 15+ gates local-network access per *responsible process*, and for
@@ -97,19 +101,27 @@ function renderSshLocalNetworkBlock(timeoutSeconds = exports.DEFAULT_CONNECT_TIM
     const base = Number.isFinite(asNumber) ? asNumber : exports.DEFAULT_CONNECT_TIMEOUT;
     const secs = Math.max(1, Math.min(300, Math.trunc(base)));
     return `${exports.SSH_LN_BEGIN}
-# Managed by devdash-agent — do not edit inside the markers.
+# Managed by dialout — do not edit inside the markers.
 # macOS Local Network Privacy judges the tmux SERVER, so every tmux session on
 # this machine is denied LAN access and ssh to a local host dies with
 # "Undefined error: 0" — while the same command works in a non-tmux window.
 # ConnectTimeout selects ssh's legacy BSD-socket connect, which is not gated.
 # The real cure is to allow tmux under System Settings > Privacy & Security >
-# Local Network. Removed by "devdash-agent uninstall-service" and
-# "devdash-agent setup-cowork --remove", or delete the block by hand.
+# Local Network. Removed by "dialout uninstall-service" and
+# "dialout setup-cowork --remove", or delete the block by hand.
 Host *
   ConnectTimeout ${secs}
 ${exports.SSH_LN_END}`;
 }
 function removeSshLocalNetworkBlock(content) {
+    {
+        const b = content.indexOf(LEGACY_SSH_LN_BEGIN);
+        const e = content.indexOf(LEGACY_SSH_LN_END);
+        if (b !== -1 && e !== -1) {
+            content = (content.slice(0, b) + content.slice(e + LEGACY_SSH_LN_END.length))
+                .replace(/\n{3,}/g, '\n\n');
+        }
+    }
     const begin = content.indexOf(exports.SSH_LN_BEGIN);
     if (begin === -1)
         return content;

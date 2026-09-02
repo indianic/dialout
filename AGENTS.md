@@ -13,14 +13,14 @@ Three processes:
 ```
 Browser ──HTTP──> Next.js :50051 ──HTTP (localhost, X-Internal-Token)──┐
    │                                                                   │
-   └──WS /ws/* (reverse-proxied)──> ws-server :50052 <──WSS /daemon────┴── devdash-agent
+   └──WS /ws/* (reverse-proxied)──> ws-server :50052 <──WSS /daemon────┴── dialout
                                           │                                (developer machine)
                                      PostgreSQL
 ```
 
 1. **Next.js app** (`src/app/`) — UI + REST API. Holds sessions, DB writes, authorization. Never talks to agents directly.
 2. **ws-server** (`src/ws-server/index.ts`) — the only process that holds agent sockets.
-3. **devdash-agent** (`packages/devdash-agent/`) — CLI daemon on each dev machine, published as `dialout`.
+3. **dialout** (`packages/dialout/`) — CLI daemon on each dev machine, published as `dialout`.
 
 ## Key Files
 
@@ -49,7 +49,7 @@ Browser ──HTTP──> Next.js :50051 ──HTTP (localhost, X-Internal-Token
 | `scripts/` | Idempotent production migrations, PM2 start, port killer, PWA icons (see `scripts/AGENTS.md`) |
 | `public/` | PWA icons, manifest, service worker (see `public/AGENTS.md`) |
 
-Skipped (tool-state / generated, no AGENTS.md): `.omc/`, `.impeccable/`, `.claude/`, `.superpowers/`, `node_modules/`, `.next/`, `data/`, `packages/devdash-agent/dist/`.
+Skipped (tool-state / generated, no AGENTS.md): `.omc/`, `.impeccable/`, `.claude/`, `.superpowers/`, `node_modules/`, `.next/`, `data/`, `packages/dialout/dist/`.
 
 ## For AI Agents
 
@@ -71,7 +71,7 @@ Skipped (tool-state / generated, no AGENTS.md): `.omc/`, `.impeccable/`, `.claud
 
 ```bash
 npm test                          # vitest — src/**/*.test.ts only
-cd packages/devdash-agent && npm test   # tsc + node --test over test/*.test.js
+cd packages/dialout && npm test   # tsc + node --test over test/*.test.js
 npx tsc --noEmit                  # typecheck the web app
 ```
 
@@ -88,7 +88,7 @@ Two test runners do not overlap. Root `npm test` does not run agent tests.
 ### Internal
 
 - `src/` ↔ `src/ws-server/` via localhost HTTP + `X-Internal-Token` (`WS_INTERNAL_TOKEN` or `sha256(JWT_SECRET)`).
-- `packages/devdash-agent/` talks to the ws-server over WSS `/daemon` with `X-API-Key` (`mch_…`).
+- `packages/dialout/` talks to the ws-server over WSS `/daemon` with `X-API-Key` (`mch_…`).
 
 ### External
 

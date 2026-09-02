@@ -1,8 +1,14 @@
 import * as fs from 'fs';
 import { ENV_MARKERS, PROC_NAMES, GENERIC_ENV_TOKEN } from './terminal-markers';
 
-export const COWORK_BEGIN = '# >>> devdash cowork wrapper >>>';
-export const COWORK_END = '# <<< devdash cowork wrapper <<<';
+export const COWORK_BEGIN = '# >>> dialout cowork wrapper >>>';
+export const COWORK_END = '# <<< dialout cowork wrapper <<<';
+
+// The markers the agent wrote before the rename. New blocks use the names
+// above, but removal has to recognise these too: the block lives in the user's
+// shell rc, and a marker we no longer match is a block nobody can ever remove.
+const LEGACY_COWORK_BEGIN = '# >>> devdash cowork wrapper >>>';
+const LEGACY_COWORK_END = '# <<< devdash cowork wrapper <<<';
 
 // Only tokens matching this may reach the shell `case` — rc-file injection
 // defense. TERM_PROGRAM values and our marker tokens are all within this set.
@@ -211,7 +217,7 @@ export function renderCoworkBlock(tokens: string[]): string {
   const gate = indent(renderMatchGate(tokens), '      ');
   const body = indent(WRAP_BODY, '        ');
   return `${COWORK_BEGIN}
-# Managed by "devdash-agent setup-cowork" — do not edit inside the markers.
+# Managed by "dialout setup-cowork" — do not edit inside the markers.
 case $- in
   *i*)
     if [ -z "$TMUX" ] && [ -z "$DEVDASH_NO_WRAP" ] && [ -z "$SSH_TTY" ] && [ -t 1 ] \\
@@ -227,7 +233,18 @@ esac
 ${COWORK_END}`;
 }
 
+function stripBetween(content: string, begin: string, end: string): string {
+  const b = content.indexOf(begin);
+  if (b === -1) return content;
+  const e = content.indexOf(end);
+  if (e === -1) return content;
+  return (content.slice(0, b) + content.slice(e + end.length)).replace(/\n{3,}/g, '\n\n');
+}
+
 export function removeCoworkBlock(content: string): string {
+  // Strip a pre-rename block first, so upgrading and then removing does not
+  // leave the old one behind.
+  content = stripBetween(content, LEGACY_COWORK_BEGIN, LEGACY_COWORK_END);
   const begin = content.indexOf(COWORK_BEGIN);
   if (begin === -1) return content;
   const end = content.indexOf(COWORK_END);
@@ -242,7 +259,7 @@ export function installCoworkBlock(
 ): 'installed' | 'updated' | 'created' {
   const existed = fs.existsSync(rcPath);
   const content = existed ? fs.readFileSync(rcPath, 'utf-8') : '';
-  const had = content.includes(COWORK_BEGIN);
+  const had = content.includes(COWORK_BEGIN) || content.includes(LEGACY_COWORK_BEGIN);
   const cleaned = removeCoworkBlock(content);
   const next = cleaned.replace(/\n*$/, '\n\n') + renderCoworkBlock(tokens) + '\n';
   fs.writeFileSync(rcPath, next);

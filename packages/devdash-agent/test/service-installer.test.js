@@ -22,11 +22,11 @@ const FAKE_HOME = '/fake/home/testuser';
 const CURRENT_AGENT_SCRIPT = '/fake/home/testuser/node_modules/dialout/dist/index.js';
 const STALE_AGENT_SCRIPT = '/fake/home/testuser/node_modules/@dialout/devdash/dist/index.js';
 
-const SYSTEMD_SYSTEM_UNIT_PATH = '/etc/systemd/system/devdash-agent.service';
-const SYSTEMD_USER_UNIT_PATH = path.join(FAKE_HOME, '.config', 'systemd', 'user', 'devdash-agent.service');
-const LAUNCHD_DAEMON_PLIST_PATH = '/Library/LaunchDaemons/com.devdash.agent.plist';
-const LAUNCHD_AGENT_PLIST_PATH = path.join(FAKE_HOME, 'Library', 'LaunchAgents', 'com.devdash.agent.plist');
-const WATCHDOG_PATH = path.join(FAKE_HOME, '.devdash-agent', 'watchdog.sh');
+const SYSTEMD_SYSTEM_UNIT_PATH = '/etc/systemd/system/dialout.service';
+const SYSTEMD_USER_UNIT_PATH = path.join(FAKE_HOME, '.config', 'systemd', 'user', 'dialout.service');
+const LAUNCHD_DAEMON_PLIST_PATH = '/Library/LaunchDaemons/com.dialout.agent.plist';
+const LAUNCHD_AGENT_PLIST_PATH = path.join(FAKE_HOME, 'Library', 'LaunchAgents', 'com.dialout.agent.plist');
+const WATCHDOG_PATH = path.join(FAKE_HOME, '.dialout', 'watchdog.sh');
 
 function unitContent(script) {
   return `[Unit]\nDescription=DevDash Agent\n\n[Service]\nExecStart=/usr/local/bin/node ${script}\nRestart=always\n`;
@@ -37,7 +37,7 @@ function plistContent(script) {
 }
 
 function watchdogContent(script) {
-  return `#!/bin/bash\n# DevDash Agent Watchdog — auto-restart if not running\nPID_FILE="/fake/home/testuser/.devdash-agent/daemon.pid"\nLOG="/fake/home/testuser/.devdash-agent/logs/watchdog.log"\nNODE="/usr/local/bin/node"\nSCRIPT="${script}"\n`;
+  return `#!/bin/bash\n# Dialout Agent Watchdog — auto-restart if not running\nPID_FILE="/fake/home/testuser/.dialout/daemon.pid"\nLOG="/fake/home/testuser/.dialout/logs/watchdog.log"\nNODE="/usr/local/bin/node"\nSCRIPT="${script}"\n`;
 }
 
 function makeDeps(overrides = {}) {
@@ -267,7 +267,7 @@ test('listSupervisors: nothing installed on darwin -> []', () => {
   assert.deepStrictEqual(supervisors, []);
 });
 
-// --- repairWatchdog: rewrites a stale ~/.devdash-agent/watchdog.sh ---
+// --- repairWatchdog: rewrites a stale ~/.dialout/watchdog.sh ---
 //
 // Unlike listSupervisors() (fully dependency-injected above), getWatchdogScript()
 // and getAgentScript() read os.homedir()/__dirname directly with no deps
@@ -299,7 +299,7 @@ function withTempHome(fn) {
 }
 
 function watchdogPathIn(tmpHome) {
-  return path.join(tmpHome, '.devdash-agent', 'watchdog.sh');
+  return path.join(tmpHome, '.dialout', 'watchdog.sh');
 }
 
 test(
@@ -376,7 +376,7 @@ test(
 
     assert.strictEqual(result.repaired, false);
     assert.strictEqual(fs.existsSync(wdPath), false);
-    assert.strictEqual(fs.existsSync(path.dirname(wdPath)), false, 'repair must not create ~/.devdash-agent when there was nothing to repair');
+    assert.strictEqual(fs.existsSync(path.dirname(wdPath)), false, 'repair must not create ~/.dialout when there was nothing to repair');
   })
 );
 
@@ -461,7 +461,7 @@ test(
 //
 // `repair` (src/cli.ts) only ever rewrites the cron watchdog's SCRIPT= path —
 // repairWatchdog() above touches nothing else. Before this fix, both `status`
-// and `repair` told the operator to run "devdash-agent repair" for ANY stale
+// and `repair` told the operator to run "dialout repair" for ANY stale
 // supervisor, including a stale launchd/systemd unit repair can never touch —
 // a dead end straight out of the production incident this release exists to
 // fix. install-service regenerates a unit's ExecStart/ProgramArguments from
@@ -472,7 +472,7 @@ test(
 // a stale unit; uninstall-service is offered as the alternative when the
 // unit is a redundant extra supervisor rather than the one to keep.
 
-test('staleSupervisorAdvice: cron kind keeps pointing at "devdash-agent repair" (repair really does fix this one)', () => {
+test('staleSupervisorAdvice: cron kind keeps pointing at "dialout repair" (repair really does fix this one)', () => {
   const advice = staleSupervisorAdvice({
     kind: 'cron',
     path: WATCHDOG_PATH,
@@ -482,10 +482,10 @@ test('staleSupervisorAdvice: cron kind keeps pointing at "devdash-agent repair" 
     targetScript: STALE_AGENT_SCRIPT,
     stale: true,
   });
-  assert.match(advice.join('\n'), /devdash-agent repair/);
+  assert.match(advice.join('\n'), /dialout repair/);
 });
 
-test('staleSupervisorAdvice: stale systemd-user unit does NOT tell the operator to run "devdash-agent repair"', () => {
+test('staleSupervisorAdvice: stale systemd-user unit does NOT tell the operator to run "dialout repair"', () => {
   const advice = staleSupervisorAdvice({
     kind: 'systemd-user',
     path: SYSTEMD_USER_UNIT_PATH,
@@ -496,8 +496,8 @@ test('staleSupervisorAdvice: stale systemd-user unit does NOT tell the operator 
     stale: true,
   });
   const text = advice.join('\n');
-  assert.doesNotMatch(text, /devdash-agent repair\b/, 'repair cannot fix a unit file — this is the exact dead-end being fixed');
-  assert.match(text, /devdash-agent install-service/);
+  assert.doesNotMatch(text, /dialout repair\b/, 'repair cannot fix a unit file — this is the exact dead-end being fixed');
+  assert.match(text, /dialout install-service/);
   assert.doesNotMatch(text, /install-service --system/, 'a login-kind (atBoot: false) unit must not be told to use --system');
 });
 
@@ -512,8 +512,8 @@ test('staleSupervisorAdvice: stale systemd-system (boot) unit points at install-
     stale: true,
   });
   const text = advice.join('\n');
-  assert.doesNotMatch(text, /devdash-agent repair\b/);
-  assert.match(text, /devdash-agent install-service --system/);
+  assert.doesNotMatch(text, /dialout repair\b/);
+  assert.match(text, /dialout install-service --system/);
 });
 
 test('staleSupervisorAdvice: stale launchd-agent (login) unit points at install-service without --system', () => {
@@ -527,8 +527,8 @@ test('staleSupervisorAdvice: stale launchd-agent (login) unit points at install-
     stale: true,
   });
   const text = advice.join('\n');
-  assert.doesNotMatch(text, /devdash-agent repair\b/);
-  assert.match(text, /devdash-agent install-service/);
+  assert.doesNotMatch(text, /dialout repair\b/);
+  assert.match(text, /dialout install-service/);
   assert.doesNotMatch(text, /--system/);
 });
 
@@ -543,8 +543,8 @@ test('staleSupervisorAdvice: stale launchd-daemon (boot) unit points at install-
     stale: true,
   });
   const text = advice.join('\n');
-  assert.doesNotMatch(text, /devdash-agent repair\b/);
-  assert.match(text, /devdash-agent install-service --system/);
+  assert.doesNotMatch(text, /dialout repair\b/);
+  assert.match(text, /dialout install-service --system/);
 });
 
 test('staleSupervisorAdvice: unit advice also mentions uninstall-service as the alternative when the unit is redundant', () => {
@@ -629,11 +629,11 @@ test('enable-linger that silently does nothing is caught by re-checking', () => 
 // no such branch: as non-root it printed sudo instructions, removed nothing,
 // and STILL set removed = true — so it exited 0 with no error while the daemon
 // kept running and kept coming back at every boot. Measured on a real machine:
-// /Library/LaunchDaemons/com.devdash.agent.plist present, launchctl reporting
+// /Library/LaunchDaemons/com.dialout.agent.plist present, launchctl reporting
 // state = running, after uninstall-service had reported success.
 
-const DAEMON_PLIST = '/Library/LaunchDaemons/com.devdash.agent.plist';
-const SYSTEM_UNIT = '/etc/systemd/system/devdash-agent.service';
+const DAEMON_PLIST = '/Library/LaunchDaemons/com.dialout.agent.plist';
+const SYSTEM_UNIT = '/etc/systemd/system/dialout.service';
 
 function uninstallHarness({ platform, present, isRoot, canPromptSudo, failCmd = false }) {
   const ran = [];
@@ -655,8 +655,8 @@ test('uninstallService escalates via sudo for a root-owned LaunchDaemon, as inst
   });
   assert.strictEqual(h.ran.length, 1, 'must actually run a command, not just print one');
   assert.match(h.ran[0], /^sudo bash -c /, 'non-root removal must go through sudo');
-  assert.match(h.ran[0], /launchctl bootout system "\/Library\/LaunchDaemons\/com\.devdash\.agent\.plist"/);
-  assert.match(h.ran[0], /rm -f "\/Library\/LaunchDaemons\/com\.devdash\.agent\.plist"/);
+  assert.match(h.ran[0], /launchctl bootout system "\/Library\/LaunchDaemons\/com\.dialout\.agent\.plist"/);
+  assert.match(h.ran[0], /rm -f "\/Library\/LaunchDaemons\/com\.dialout\.agent\.plist"/);
   assert.strictEqual(h.result.removed, true);
   assert.deepStrictEqual(h.result.pending, []);
 });
@@ -706,8 +706,8 @@ test('uninstallService escalates for a systemd SYSTEM unit too', () => {
   });
   assert.strictEqual(h.ran.length, 1);
   assert.match(h.ran[0], /^sudo bash -c /);
-  assert.match(h.ran[0], /systemctl disable --now devdash-agent/);
-  assert.match(h.ran[0], /rm -f "\/etc\/systemd\/system\/devdash-agent\.service"/);
+  assert.match(h.ran[0], /systemctl disable --now dialout/);
+  assert.match(h.ran[0], /rm -f "\/etc\/systemd\/system\/dialout\.service"/);
   assert.match(h.ran[0], /systemctl daemon-reload/);
   assert.strictEqual(h.result.removed, true);
 });
@@ -724,7 +724,7 @@ test('uninstallService reports NOT removed for a systemd system unit it cannot e
 
 // --- serviceUser: a boot service must run as the HUMAN, never as root ---
 //
-// os.userInfo() reports the EFFECTIVE user, so `sudo devdash-agent
+// os.userInfo() reports the EFFECTIVE user, so `sudo dialout
 // install-service --system` wrote UserName=root into the plist. tmux keys its
 // socket by uid (/tmp/tmux-<uid>/default), so a root daemon looks in
 // /tmp/tmux-0, finds no server, and listSessions() returns [] through a silent

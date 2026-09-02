@@ -213,7 +213,7 @@ export default function AiComposer({
           // accessory is OS chrome and Safari may show it regardless. The
           // data-* attributes additionally stop password-manager extensions
           // overlaying their own button on the field.
-          name="devdash-agent-message"
+          name="dialout-message"
           autoComplete="off"
           data-1p-ignore=""
           data-lpignore="true"
