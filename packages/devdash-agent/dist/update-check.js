@@ -39,11 +39,15 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const child_process_1 = require("child_process");
+const config_1 = require("./config");
 // Public npm. The package used to live on a private registry, which meant
 // nobody outside the company could install or self-update it — the single
 // hardest blocker to releasing this openly.
 const REGISTRY = 'https://registry.npmjs.org';
-const PACKAGE_NAME = 'dialout';
+// The npm package name, which is NOT the command name: the binary stays
+// `dialout` so nothing a user types changes, while the package moved under
+// the organisation's scope.
+const PACKAGE_NAME = '@indianic/dialout';
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -86,7 +90,7 @@ function compareVersions(current, latest) {
     return false;
 }
 function getLastCheckFile() {
-    return path.join(os.homedir(), '.devdash-agent', 'last-update-check');
+    return path.join((0, config_1.configDirFor)(os.homedir()), 'last-update-check');
 }
 function shouldCheck() {
     try {
@@ -119,7 +123,7 @@ async function checkForUpdate() {
         console.log(`${YELLOW}╔══════════════════════════════════════════════════════════╗${NC}`);
         console.log(`${YELLOW}║${NC}  ${BOLD}Update available!${NC}  ${current} → ${GREEN}${latest}${NC}                      ${YELLOW}║${NC}`);
         console.log(`${YELLOW}║${NC}                                                          ${YELLOW}║${NC}`);
-        console.log(`${YELLOW}║${NC}  Run: ${CYAN}devdash-agent update${NC}                                ${YELLOW}║${NC}`);
+        console.log(`${YELLOW}║${NC}  Run: ${CYAN}dialout update${NC}                                ${YELLOW}║${NC}`);
         console.log(`${YELLOW}╚══════════════════════════════════════════════════════════╝${NC}`);
         console.log('');
     }
@@ -152,7 +156,7 @@ async function performUpdate() {
         // Self-heal: a watchdog written by a prior version (or before a package
         // rename) can be left with a SCRIPT= line pointing at the old install.
         // Repair it on every successful upgrade so machines don't need a manual
-        // "devdash-agent repair" to notice — this is exactly the incident this
+        // "dialout repair" to notice — this is exactly the incident this
         // release was built to fix (see docs/supervisor-hygiene-2.4.1.md).
         try {
             const { repairWatchdog } = require('./service-installer');
@@ -177,13 +181,13 @@ async function performUpdate() {
             const { isServiceInstalled, isCronInstalled } = require('./service-installer');
             if (isServiceInstalled()) {
                 console.log(`  ${YELLOW}Service detected — restart to use new version:${NC}`);
-                console.log(`    devdash-agent uninstall-service`);
-                console.log(`    devdash-agent install-service`);
+                console.log(`    dialout uninstall-service`);
+                console.log(`    dialout install-service`);
                 console.log('');
             }
             else if (isCronInstalled()) {
                 console.log(`  ${YELLOW}Cron watchdog will auto-restart with new version.${NC}`);
-                console.log(`  Or restart now: devdash-agent stop && devdash-agent start --daemon`);
+                console.log(`  Or restart now: dialout stop && dialout start --daemon`);
                 console.log('');
             }
         }

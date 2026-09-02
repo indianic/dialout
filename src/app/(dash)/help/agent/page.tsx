@@ -60,7 +60,7 @@ export default function AgentHelpPage() {
 
           <h3>1. Install the agent</h3>
           <p>Once per machine. It ships for macOS and Linux.</p>
-          <CopyBlock label="Terminal" code={`npm install -g dialout`} />
+          <CopyBlock label="Terminal" code={`npm install -g @indianic/dialout`} />
 
           <h3>2. Get an API key</h3>
           <p>
@@ -72,12 +72,12 @@ export default function AgentHelpPage() {
           <h3>3. Connect it</h3>
           <p>
             This asks for the server address and the key you just copied, then saves them to{' '}
-            <code>~/.devdash-agent/config.json</code>.
+            <code>~/.dialout/config.json</code>.
           </p>
-          <CopyBlock label="Terminal" code={`devdash-agent init`} />
+          <CopyBlock label="Terminal" code={`dialout init`} />
 
           <h3>4. Check it worked</h3>
-          <CopyBlock label="Terminal" code={`devdash-agent status`} />
+          <CopyBlock label="Terminal" code={`dialout status`} />
           <p>
             The machine&rsquo;s dot on the Machines page should now be green. If it is not, jump to{' '}
             <a href="#trouble">when something is wrong</a>.
@@ -89,7 +89,7 @@ export default function AgentHelpPage() {
             An agent that stops when you close your laptop lid is not much use. Install it as a
             service and the machine starts it for you, forever.
           </p>
-          <CopyBlock label="Terminal" code={`devdash-agent install-service`} />
+          <CopyBlock label="Terminal" code={`dialout install-service`} />
           <p>
             On a server, run that as <code>root</code> and it installs a boot service with no
             questions asked — it starts before anyone logs in and keeps running after everyone logs
@@ -100,10 +100,10 @@ export default function AgentHelpPage() {
             If you are on Linux and installed as a normal user, the agent enables{' '}
             <em>lingering</em> for you. Without it, Linux shuts down your background services the
             moment your last session ends — which on a server means the agent dies every time you
-            close the SSH window. <code>devdash-agent status</code> warns you if this is not set.
+            close the SSH window. <code>dialout status</code> warns you if this is not set.
           </Note>
           <p>To remove it again:</p>
-          <CopyBlock label="Terminal" code={`devdash-agent uninstall-service`} />
+          <CopyBlock label="Terminal" code={`dialout uninstall-service`} />
         </HelpSection>
 
         <HelpSection id="cowork" title="Share your terminals">
@@ -112,7 +112,7 @@ export default function AgentHelpPage() {
             terminal windows you open on that machine — in iTerm, Terminal, VS Code, whatever you
             use — start appearing on the Terminals page under <strong>Local</strong>.
           </p>
-          <CopyBlock label="Terminal" code={`devdash-agent setup-cowork`} />
+          <CopyBlock label="Terminal" code={`dialout setup-cowork`} />
           <p>
             It asks which terminal apps to include and ticks the one you are sitting in. Only the
             apps you choose are affected; every other terminal on the machine stays completely
@@ -123,7 +123,7 @@ export default function AgentHelpPage() {
             very same session up from your phone — watching with <strong>Peek</strong>, or typing
             with <strong>Drive</strong>. Restart the agent afterwards so it begins reporting:
           </p>
-          <CopyBlock label="Terminal" code={`devdash-agent restart`} />
+          <CopyBlock label="Terminal" code={`dialout restart`} />
           <Note>
             Under the hood this uses <code>tmux</code>, which is what lets a session outlive the
             window it was opened in. The agent installs tmux for you if it is missing.
@@ -136,22 +136,22 @@ export default function AgentHelpPage() {
           <h3>Running it</h3>
           <CopyBlock
             label="Terminal"
-            code={`devdash-agent start            # run in this window, Ctrl+C to stop
-devdash-agent start --daemon   # run in the background
-devdash-agent stop             # stop the background agent
-devdash-agent restart          # stop, then start again
-devdash-agent status           # is it running, and how`}
+            code={`dialout start            # run in this window, Ctrl+C to stop
+dialout start --daemon   # run in the background
+dialout stop             # stop the background agent
+dialout restart          # stop, then start again
+dialout status           # is it running, and how`}
           />
 
           <h3>Setting it up</h3>
           <CopyBlock
             label="Terminal"
-            code={`devdash-agent init                # server address + API key
-devdash-agent install-service     # start automatically, forever
-devdash-agent uninstall-service   # stop doing that
-devdash-agent setup-cowork        # show your terminals in Dialout
-devdash-agent setup-cron          # a watchdog that restarts it if it dies
-devdash-agent repair              # fix a watchdog left over from an old version`}
+            code={`dialout init                # server address + API key
+dialout install-service     # start automatically, forever
+dialout uninstall-service   # stop doing that
+dialout setup-cowork        # show your terminals in Dialout
+dialout setup-cron          # a watchdog that restarts it if it dies
+dialout repair              # fix a watchdog left over from an old version`}
           />
 
           <h3>Profiles</h3>
@@ -161,34 +161,34 @@ devdash-agent repair              # fix a watchdog left over from an old version
           </p>
           <CopyBlock
             label="Terminal"
-            code={`devdash-agent profiles              # list what you have saved
-devdash-agent use local             # switch to the local one
-devdash-agent start --profile local # run against it just this once`}
+            code={`dialout profiles              # list what you have saved
+dialout use local             # switch to the local one
+dialout start --profile local # run against it just this once`}
           />
 
           <h3>Configuration</h3>
           <CopyBlock
             label="Terminal"
-            code={`devdash-agent config show          # current settings, key masked
-devdash-agent config path          # where the file lives
-devdash-agent config set <k> <v>   # change one setting
-devdash-agent config reset         # back to defaults, keeps your key`}
+            code={`dialout config show          # current settings, key masked
+dialout config path          # where the file lives
+dialout config set <k> <v>   # change one setting
+dialout config reset         # back to defaults, keeps your key`}
           />
         </HelpSection>
 
         <HelpSection id="trouble" title="When something is wrong">
           <p>
-            Start with <code>devdash-agent status</code>. It tells you whether the agent is running,
+            Start with <code>dialout status</code>. It tells you whether the agent is running,
             what is supervising it, and whether anything is misconfigured.
           </p>
 
           <h3>The machine shows as offline</h3>
           <Steps
             items={[
-              'Run devdash-agent status on the machine. If it is not running, start it.',
+              'Run dialout status on the machine. If it is not running, start it.',
               'Check the machine is actually awake and online — a sleeping laptop is an offline machine.',
-              'Confirm the server address is right with devdash-agent config show.',
-              'If it says the API key was rejected, the key was removed or regenerated. Make a new one on the Machines page and run devdash-agent init again.',
+              'Confirm the server address is right with dialout config show.',
+              'If it says the API key was rejected, the key was removed or regenerated. Make a new one on the Machines page and run dialout init again.',
             ]}
           />
 
@@ -201,32 +201,32 @@ devdash-agent config reset         # back to defaults, keeps your key`}
             label="Terminal"
             code={`sudo loginctl enable-linger $USER
 # or, better on a server:
-sudo devdash-agent install-service --system`}
+sudo dialout install-service --system`}
           />
 
           <h3>My terminals do not show up under Local</h3>
           <p>
-            Run <code>devdash-agent setup-cowork</code>, make sure your terminal app is ticked, then{' '}
-            <code>devdash-agent restart</code>. Terminal windows you already had open will not
+            Run <code>dialout setup-cowork</code>, make sure your terminal app is ticked, then{' '}
+            <code>dialout restart</code>. Terminal windows you already had open will not
             appear — open a new one.
           </p>
 
           <h3>It connects, then drops, over and over</h3>
           <p>
             That is usually two agents fighting over the same machine — a service and a manual one,
-            for instance. <code>devdash-agent status</code> lists everything supervising the agent
+            for instance. <code>dialout status</code> lists everything supervising the agent
             and flags duplicates.
           </p>
         </HelpSection>
 
         <HelpSection id="update" title="Updating">
           <p>The agent tells you when a new version is out. To take it:</p>
-          <CopyBlock label="Terminal" code={`devdash-agent update`} />
+          <CopyBlock label="Terminal" code={`dialout update`} />
           <p>Or do it through npm, then restart:</p>
           <CopyBlock
             label="Terminal"
-            code={`npm install -g dialout
-devdash-agent restart`}
+            code={`npm install -g @indianic/dialout
+dialout restart`}
           />
           <Note>
             Updating never disturbs your running terminal sessions. They are kept alive across the

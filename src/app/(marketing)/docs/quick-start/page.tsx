@@ -92,7 +92,7 @@ export default function QuickStartPage() {
             <div>
               <h3 className="mk-h3">1. Install it</h3>
               <div style={{ marginTop: 10 }}>
-                <CopyCommand command="npm install -g dialout" note="macOS and Linux" />
+                <CopyCommand command="npm install -g @indianic/dialout" note="macOS and Linux" />
               </div>
             </div>
             <div>

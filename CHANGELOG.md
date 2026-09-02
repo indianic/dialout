@@ -10,6 +10,16 @@ Dates are the day the change reached `dialout.dev`.
 
 Nothing yet.
 
+## 2026-09-02
+
+- **The agent moved to `@indianic/dialout`.** Install instructions across the
+  README, the marketing site, the in-app help, the quick-start docs and the
+  invite and approval emails now point at the scoped name. The command is still
+  `dialout` and existing configuration is untouched — only the install line
+  changes. The old `dialout` package is deprecated rather than unpublished,
+  because unpublishing would release the name back to npm's public pool while it
+  is still printed in a public README.
+
 ## 2026-09-01
 
 ### Tunnel

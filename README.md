@@ -7,7 +7,7 @@
 **Your machines, one room. The agent dials out, so nothing has to dial in.**
 
 [![License](https://img.shields.io/badge/license-MIT-1a56db?style=flat-square)](LICENSE)
-[![npm](https://img.shields.io/npm/v/dialout?style=flat-square&color=1a56db&label=agent)](https://www.npmjs.com/package/dialout)
+[![npm](https://img.shields.io/npm/v/%40indianic%2Fdialout?style=flat-square&color=1a56db&label=agent)](https://www.npmjs.com/package/@indianic/dialout)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-1a56db?style=flat-square)](package.json)
 [![Agent](https://img.shields.io/badge/agent-macOS%20%C2%B7%20Linux-0c0e13?style=flat-square)](packages/devdash-agent)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-no%20cloud%20account-0c0e13?style=flat-square)](#self-hosting)
@@ -65,7 +65,7 @@ will sit and wait for an answer the moment you walk away from it.
 One URL. Every machine. From a phone if that is what you have on you.
 
 ```console
-$ npm install -g dialout && dialout init
+$ npm install -g @indianic/dialout && dialout init
 ```
 
 - **Search a port, keep the answer.** Scan a range, find what is listening, save
@@ -244,7 +244,7 @@ hash.** Generate a new one any time if you lose it.
 On the computer you just registered:
 
 ```bash
-npm install -g dialout
+npm install -g @indianic/dialout
 ```
 
 macOS or Linux, Node 18 or newer. Nothing else to install.
@@ -468,7 +468,7 @@ settings that matter most when the thing faces the internet.
 | `src/app/api` | 40 routes — every one authenticated, every client-supplied id authorized |
 | `src/ws-server` | The WebSocket process, 1,753 lines, single file |
 | `src/lib/schema.ts` | 20 tables, Drizzle ORM |
-| `packages/devdash-agent` | The CLI agent published as [`dialout`](https://www.npmjs.com/package/dialout) — 19 commands, macOS and Linux |
+| `packages/devdash-agent` | The CLI agent, published as [`@indianic/dialout`](https://www.npmjs.com/package/@indianic/dialout) — 19 commands, macOS and Linux |
 | `packages/devdash-shared` | Types shared by server, agent and mobile |
 | `packages/devdash-mobile` | The Expo app |
 
@@ -527,5 +527,5 @@ company. So: use it commercially, modify it, fork it, run it for clients, embed
 it in something you sell. Keep the copyright notice, and there is no warranty.
 That is the whole of it.
 
-The agent on npm ([`dialout`](https://www.npmjs.com/package/dialout)) and the
-shared types package are MIT on the same terms.
+The agent on npm ([`@indianic/dialout`](https://www.npmjs.com/package/@indianic/dialout))
+and the shared types package are MIT on the same terms.

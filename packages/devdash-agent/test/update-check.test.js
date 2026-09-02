@@ -24,7 +24,7 @@ test('performUpdate: a throwing repairWatchdog is reported but does not fail (or
   console.log = (...args) => { logs.push(args.join(' ')); };
   console.error = (...args) => { errors.push(args.join(' ')); };
 
-  // Simulate `npm install -g dialout@<latest> ...` succeeding
+  // Simulate `npm install -g @indianic/dialout@<latest> ...` succeeding
   // without actually running it.
   cp.execSync = () => '';
 

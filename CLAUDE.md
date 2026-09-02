@@ -286,7 +286,7 @@ npm run dev               # http://localhost:50051
 Agent, on each dev machine:
 
 ```bash
-npm install -g dialout
+npm install -g @indianic/dialout
 dialout init        # server URL + mch_… API key from Settings → Machines
 dialout install-service
 dialout status

@@ -264,7 +264,7 @@ npm run build && npm run pm2:start
 # 1. Add the private registry
 
 # 2. Install globally
-npm install -g dialout
+npm install -g @indianic/dialout
 
 # 3. Configure
 devdash-agent init

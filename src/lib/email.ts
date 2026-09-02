@@ -301,7 +301,7 @@ export function signupInviteEmailHtml(
     ${ctaButton(link, 'CREATE MY ACCOUNT')}
     <div style="font-size:12px; color:#6b6d7e; line-height:1.6; margin-top:22px;">
       Setting up takes about ten minutes: create your account, add a machine, install the
-      agent on it with <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g dialout</code>,
+      agent on it with <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g @indianic/dialout</code>,
       and it appears in your dashboard.
     </div>
     <div style="border-top:1px solid #eef0f5; margin-top:26px; padding-top:18px; font-family:monospace; font-size:9px; color:#b6b8c6; letter-spacing:1px;">
@@ -376,7 +376,7 @@ export function accessApprovedEmailHtml(
     ${ctaButton(link, 'CREATE MY ACCOUNT')}
     <div style="font-size:12px; color:#6b6d7e; line-height:1.6; margin-top:22px;">
       After you sign up: add a machine in Settings, copy the key it gives you, then run
-      <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g dialout</code>
+      <code style="font-family:monospace; background:#f4f5f8; padding:2px 6px; border-radius:4px;">npm install -g @indianic/dialout</code>
       on that computer and paste the key when it asks. That is the whole setup.
     </div>
   `);

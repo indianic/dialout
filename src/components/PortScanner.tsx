@@ -17,7 +17,7 @@ function DaemonSetupGuide({ onClose }: { onClose: () => void }) {
       n: 1,
       title: 'Install Globally',
       body: <pre className="font-mono" style={{ background: 'var(--card)', borderRadius: 'var(--r-sm)', padding: '12px 16px', fontSize: 13, color: 'var(--txt)', overflow: 'auto', margin: 0, border: '1px solid var(--b1)', lineHeight: 1.7 }}>
-{`$ npm install -g dialout`}
+{`$ npm install -g @indianic/dialout`}
       </pre>,
     },
     {
@@ -25,7 +25,7 @@ function DaemonSetupGuide({ onClose }: { onClose: () => void }) {
       title: 'Configure & Connect',
       body: <>
         <pre className="font-mono" style={{ background: 'var(--card)', borderRadius: 'var(--r-sm)', padding: '12px 16px', fontSize: 13, color: 'var(--txt)', overflow: 'auto', margin: 0, border: '1px solid var(--b1)', lineHeight: 1.7 }}>
-{`$ devdash-agent init
+{`$ dialout init
   Server URL: wss://www.dialout.dev
   API Key:    mch_xxxxxxxxxxxxxxxx`}
         </pre>
@@ -41,11 +41,11 @@ function DaemonSetupGuide({ onClose }: { onClose: () => void }) {
       body: <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div className="glass" style={{ flex: 1, minWidth: 160, borderRadius: 'var(--r-sm)', padding: '12px 16px' }}>
           <div className="label" style={{ marginBottom: 6 }}>Foreground</div>
-          <code className="font-mono" style={{ fontSize: 13, color: 'var(--txt)' }}>$ devdash-agent start</code>
+          <code className="font-mono" style={{ fontSize: 13, color: 'var(--txt)' }}>$ dialout start</code>
         </div>
         <div className="glass" style={{ flex: 1, minWidth: 160, borderRadius: 'var(--r-sm)', padding: '12px 16px' }}>
           <div className="label" style={{ marginBottom: 6 }}>As Service</div>
-          <code className="font-mono" style={{ fontSize: 13, color: 'var(--txt)' }}>$ devdash-agent install-service</code>
+          <code className="font-mono" style={{ fontSize: 13, color: 'var(--txt)' }}>$ dialout install-service</code>
         </div>
       </div>,
     },

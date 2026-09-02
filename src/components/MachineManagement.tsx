@@ -378,7 +378,7 @@ export default function MachineManagement({ userId, machines: initialMachines, c
                 </div>
                 <pre className="font-mono" style={{ fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--muted)' }}>
 {`# Install
-npm install -g dialout
+npm install -g @indianic/dialout
 
 # Configure + start
 dialout init

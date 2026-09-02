@@ -1,6 +1,6 @@
 {
-  "name": "dialout",
-  "version": "1.1.1",
+  "name": "@indianic/dialout",
+  "version": "1.2.0",
   "description": "Dialout agent — reach your office, home or build machine from any browser or phone. Remote tmux terminals, live port checks, filesystem browsing, process control and HTTP tunnels. The agent dials out: no inbound ports, no VPN, no port forwarding.",
   "bin": {
     "dialout": "./bin/devdash-agent.js"
@@ -51,7 +51,8 @@
   },
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "engines": {
     "node": ">=18.0.0"

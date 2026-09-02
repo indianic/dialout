@@ -356,7 +356,7 @@ export const GETTING_STARTED: GettingStartedStep[] = [
     plain: 'One command, on the computer you just added. Not on the one you are browsing from.',
     detail:
       'A small program that runs in the background. macOS and Linux, Node 18 or newer.',
-    command: 'npm install -g dialout',
+    command: 'npm install -g @indianic/dialout',
     note: 'Run this on the computer you want to reach',
     where: 'machine',
   },
@@ -385,7 +385,7 @@ export const GETTING_STARTED: GettingStartedStep[] = [
 export const INSTALL_STEPS = [
   {
     title: 'Install the agent',
-    command: 'npm install -g dialout',
+    command: 'npm install -g @indianic/dialout',
     note: 'macOS and Linux',
   },
   {
@@ -432,7 +432,7 @@ export const FAQ = [
   },
   {
     q: 'How do I get started?',
-    a: 'Get an account — sign up on dialout.dev, or run your own copy from GitHub. Set a 4-digit code and two-factor. Add your first computer in Settings and copy the key it gives you. Then, on that computer, run npm install -g dialout followed by dialout init and paste the key. It turns green in your dashboard. About ten minutes end to end.',
+    a: 'Get an account — sign up on dialout.dev, or run your own copy from GitHub. Set a 4-digit code and two-factor. Add your first computer in Settings and copy the key it gives you. Then, on that computer, run npm install -g @indianic/dialout followed by dialout init and paste the key. It turns green in your dashboard. About ten minutes end to end.',
   },
   {
     q: 'Why is signing up invite-only?',

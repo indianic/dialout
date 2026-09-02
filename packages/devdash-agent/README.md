@@ -2,11 +2,13 @@
 
 <img src="https://raw.githubusercontent.com/indianic/dialout/main/docs/assets/logo.svg" width="88" height="88" alt="Dialout">
 
-# dialout
+# @indianic/dialout
 
 **Your machines, one room. The agent dials out, so nothing has to dial in.**
 
-[![npm](https://img.shields.io/npm/v/dialout?style=flat-square&color=1a56db)](https://www.npmjs.com/package/dialout)
+<sub>The package is scoped; the command it installs is plain `dialout`.</sub>
+
+[![npm](https://img.shields.io/npm/v/%40indianic%2Fdialout?style=flat-square&color=1a56db)](https://www.npmjs.com/package/@indianic/dialout)
 [![License](https://img.shields.io/badge/license-MIT-1a56db?style=flat-square)](https://github.com/indianic/dialout/blob/main/LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-1a56db?style=flat-square)](https://nodejs.org)
 [![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux-0c0e13?style=flat-square)](#requirements)
@@ -27,7 +29,7 @@ is no inbound port to open, no VPN to join, and no port forwarding to configure.
 If the machine can reach the internet, you can reach the machine.
 
 ```bash
-npm install -g dialout
+npm install -g @indianic/dialout
 dialout init
 dialout install-service
 ```
@@ -126,7 +128,7 @@ hash.** Generate a new one at any time if you lose it.
 On the computer you just registered:
 
 ```bash
-npm install -g dialout
+npm install -g @indianic/dialout
 ```
 
 ### 5 · Point it at your server
@@ -363,23 +365,30 @@ macOS: read `~/.dialout/logs/stderr.log`. Linux:
 sure `dialout init` ran before the service was installed. If a previous
 supervisor is stuck, `dialout repair` diagnoses and clears it.
 
-## Upgrading from `@indianic/devdash-agent`
+## Upgrading from an earlier package name
 
-Earlier private builds were published as `@indianic/devdash-agent` and kept their
-configuration in `~/.devdash-agent`. Both packages provide a `dialout` binary,
-so remove the old one first:
+This agent has been published under three names. If you have an older one
+installed, remove it first — they all provide the same `dialout` command, and
+npm will not overwrite an existing binary:
 
 ```bash
-dialout uninstall-service          # stop the old service
-npm uninstall -g @indianic/devdash-agent
-npm install -g dialout
-dialout install-service --system   # or without --system for a login service
+dialout uninstall-service                 # stop the old service
+
+npm uninstall -g dialout                  # the unscoped name (deprecated)
+npm uninstall -g @indianic/devdash-agent  # the original private package
+
+npm install -g @indianic/dialout
+dialout install-service --system          # or without --system for a login service
 dialout status
 ```
 
-Your old configuration is **copied** — not moved — from `~/.devdash-agent` into
-`~/.dialout` on first run, so an old agent still installed elsewhere keeps
-working and no re-`init` is needed.
+Your configuration is untouched by any of this. `~/.dialout/config.json` stays
+where it is, and a much older `~/.devdash-agent` is **copied** rather than moved
+on first run, so no re-`init` is needed.
+
+> **On an IndiaNIC machine, check your `~/.npmrc` first.** A line reading
+> `@indianic:registry=https://npm.indianic.in/` points the whole scope at a
+> retired private registry, and this package will 404 until it is removed.
 
 ## The mobile app
 

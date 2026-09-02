@@ -9,14 +9,35 @@ All notable changes to the Dialout agent are documented here.
 > would have implied a history nobody could read. The 2.x entries are kept
 > because the code is the same lineage and the reasoning in them still applies.
 
-## [1.1.1] - 2026-09-02
+## [1.2.0] - 2026-09-02
 
-> **`@indianic/dialout` also exists from this release on.** It is an alias — a
-> four-kilobyte package whose only content is a dependency on `dialout` and a
-> one-line shim that runs it — published so the agent resolves under the
-> organisation's namespace. **`dialout` remains the real package and the
-> documented install.** Install one or the other, never both: they provide the
-> same `dialout` command and npm refuses to overwrite an existing binary.
+**The package is now `@indianic/dialout`. `dialout` is deprecated.**
+
+```bash
+npm uninstall -g dialout
+npm install -g @indianic/dialout
+```
+
+- **chore: renamed to `@indianic/dialout`.** One package under the organisation's
+  scope, rather than an unscoped package plus an alias pointing at it. The two
+  names were drifting apart already — different versions, different READMEs —
+  which is exactly the confusion having two of them was going to cause.
+- **The command you type does not change.** The binary is still `dialout`, so
+  every `dialout init`, `dialout status`, `dialout install-service` is
+  unaffected. Only the install line moves.
+- **Your configuration is untouched.** `~/.dialout/config.json` stays where it
+  is; there is nothing to re-`init`.
+- **fix: `dialout update` follows the rename.** It installs by package name, so
+  without this it would have kept pulling the deprecated package indefinitely.
+- `dialout` 1.0.0 through 1.1.1 are deprecated with a message pointing here, not
+  unpublished. Unpublishing would release the name back to npm's public pool
+  while it is still printed in a public README and on the website, which is an
+  invitation to whoever takes it next.
+- `@indianic/dialout` 1.1.1 and 1.1.2 are deprecated too. Those were the thin
+  alias, which depended on the old package; 1.2.0 is the first scoped release
+  that contains the agent itself.
+
+## [1.1.1] - 2026-09-02
 
 
 - **docs: the release history is now written down and linked.** Entries for
